@@ -111,7 +111,13 @@ fun GalleryAppRoot(viewModel: GalleryViewModel) {
 
     // Check & request permissions on startup
     LaunchedEffect(Unit) {
-        val permissionsToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val permissionsToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            listOf(
+                android.Manifest.permission.READ_MEDIA_IMAGES,
+                android.Manifest.permission.READ_MEDIA_VIDEO,
+                android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
+            )
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             listOf(
                 android.Manifest.permission.READ_MEDIA_IMAGES,
                 android.Manifest.permission.READ_MEDIA_VIDEO

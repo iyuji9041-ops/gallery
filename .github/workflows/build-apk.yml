@@ -1,0 +1,93 @@
+name: Build and Release Android APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build & Verify Android App
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'gradle'
+
+      - name: Accept Android SDK licenses and install platform
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" || true
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Debug APK
+        run: ./gradlew clean assembleDebug --stacktrace --no-daemon
+
+      - name: Build Release APK
+        run: ./gradlew assembleRelease --stacktrace --no-daemon
+
+      - name: Run Android Lint
+        run: ./gradlew lint --stacktrace --no-daemon
+
+      - name: Package APKs
+        run: |
+          mkdir -p output-apks
+          find app/build/outputs/apk -name "*.apk" -exec cp {} output-apks/ \;
+          ls -la output-apks/
+
+      - name: Upload APKs Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gallery-APKs
+          path: output-apks/*.apk
+          if-no-files-found: error
+
+      - name: Upload Lint Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Lint-Report
+          path: app/build/reports/lint-results*
+          if-no-files-found: ignore
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: output-apks/*.apk
+          tag_name: v1.0.0
+          name: Gallery v1.0.0 (Modern Gradle & Latest Stable Stack)
+          body: |
+            ## Gallery Android Application v1.0.0
+            
+            Fully upgraded to modern Android stack:
+            - **Gradle**: 9.9.1
+            - **Android Gradle Plugin**: 9.5.1
+            - **Kotlin**: 2.4.21
+            - **Compose Compiler Plugin**: 2.4.21
+            - **KSP**: 2.3.14
+            - **Compose BOM**: 2026.09.00
+            - **Room**: 2.8.5 (KSP & Room Gradle Plugin)
+            - **Coil**: 3.6.3 (coil-compose, coil-video)
+            - **Media3**: 1.11.1
+            - **Android SDK**: compileSdk 36, targetSdk 36, minSdk 24
+            
+            Included artifacts:
+            - Debug APK
+            - Release APK (minified & resource shrunk with R8)
+          generate_release_notes: false

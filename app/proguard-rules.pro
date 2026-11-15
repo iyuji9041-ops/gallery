@@ -1,10 +1,33 @@
 # Add project-specific ProGuard/R8 keep rules here.
-# These are applied on top of the bundled defaults (proguard-android-optimize.txt) when the
-# build type has minifyEnabled = true.
-#
-# Keep a class that is referenced only by reflection / from XML, e.g.:
-# -keep class com.example.SomeClass { *; }
-#
-# Preserve line numbers for readable crash stack traces, then hide the original file name:
-# -keepattributes SourceFile,LineNumberTable
-# -renamesourcefileattribute SourceFile
+
+# Keep line numbers for debugging stack traces
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
+
+# Room keep rules
+-keep class * extends androidx.room.RoomDatabase
+-dontwarn androidx.room.paging.**
+-keepclassmembers class * extends androidx.room.RoomDatabase {
+    <init>();
+}
+-keep class com.photo.gallery.data.local.model.** { *; }
+-keep interface com.photo.gallery.data.local.dao.** { *; }
+
+# Coil 3 keep rules
+-keep class coil3.** { *; }
+-dontwarn coil3.**
+-keep class * implements coil3.decode.Decoder$Factory { *; }
+-keep class * implements coil3.fetch.Fetcher$Factory { *; }
+
+# Media3 ExoPlayer keep rules
+-keep class androidx.media3.exoplayer.** { *; }
+-keep class androidx.media3.ui.** { *; }
+-keep class androidx.media3.common.** { *; }
+-dontwarn androidx.media3.**
+
+# Biometric keep rules
+-keep class androidx.biometric.** { *; }
+-dontwarn androidx.biometric.**
+
+# Kotlin Coroutines
+-dontwarn kotlinx.coroutines.**

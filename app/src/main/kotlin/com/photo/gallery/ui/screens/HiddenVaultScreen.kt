@@ -56,7 +56,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import com.photo.gallery.data.local.model.HiddenMediaEntity
 import com.photo.gallery.ui.theme.BentoAccent
 import com.photo.gallery.ui.theme.BentoAccentContainer

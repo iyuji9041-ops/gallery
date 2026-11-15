@@ -77,10 +77,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
-import coil.size.Precision
-import coil.size.Scale
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
+import coil3.size.Precision
+import coil3.size.Scale
 import com.photo.gallery.data.model.MediaItem
 import com.photo.gallery.ui.theme.BentoAccent
 import com.photo.gallery.ui.theme.BentoAccentContainer
