@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '21'
@@ -77,7 +77,7 @@ jobs:
             
             Fully upgraded to modern Android stack:
             - **Gradle**: 9.9.1
-            - **Android Gradle Plugin**: 9.5.1
+            - **Android Gradle Plugin**: 9.5.1 (Built-in Kotlin)
             - **Kotlin**: 2.4.21
             - **Compose Compiler Plugin**: 2.4.21
             - **KSP**: 2.3.14
