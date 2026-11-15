@@ -1,0 +1,29 @@
+{
+  "format": 1,
+  "kind": "project",
+  "name": "Gallery",
+  "description": "",
+  "author": "",
+  "createdBy": "CodeAssist",
+  "exportedAt": 1794603506718,
+  "isAndroid": true,
+  "packageName": "com.photo.gallery",
+  "moduleCount": 1,
+  "modules": [
+    "app"
+  ],
+  "moduleInfos": [
+    {
+      "name": "app",
+      "path": "app",
+      "type": "android-app",
+      "files": 52,
+      "size": 350904
+    }
+  ],
+  "fileCount": 111,
+  "uncompressedSize": 474532,
+  "hasBundledDeps": true,
+  "iconEntry": "icon.png",
+  "store": null
+}

@@ -1,0 +1,60 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Outer Rounded Gallery Picture Frame (Safe zone centered around 54,54) -->
+    <path
+        android:pathData="M33,32 C33,28.69 35.69,26 39,26 L69,26 C72.31,26 75,28.69 75,32 L75,76 C75,79.31 72.31,82 69,82 L39,82 C35.69,82 33,79.31 33,76 Z"
+        android:strokeWidth="2.5"
+        android:strokeColor="#38BDF8"
+        android:fillColor="#151E2E" />
+
+    <!-- Mountain Landscape representation inside photo frame -->
+    <path
+        android:pathData="M35,68 L47,53 L56,64 L63,55 L73,68 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="54"
+                android:startY="50"
+                android:endX="54"
+                android:endY="68"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#22D3EE" />
+                <item android:offset="1.0" android:color="#0284C7" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Sun / Aperture in top right of photo -->
+    <path
+        android:pathData="M44,38 A4,4 0 1 0 44,46 A4,4 0 1 0 44,38 Z"
+        android:fillColor="#38BDF8" />
+
+    <!-- Central Security Shield Badge -->
+    <path
+        android:pathData="M54,44 L67,49 C67,61 54,71 54,71 C54,71 41,61 41,49 Z"
+        android:strokeWidth="2"
+        android:strokeColor="#00E5FF"
+        android:fillColor="#0B132B" />
+
+    <!-- Padlock Shackle -->
+    <path
+        android:pathData="M51,55 L51,52 C51,50.34 52.34,49 54,49 C55.66,49 57,52 57,52 L57,55"
+        android:strokeWidth="1.8"
+        android:strokeColor="#00E5FF"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- Padlock Body -->
+    <path
+        android:pathData="M49,55 C48.45,55 48,55.45 48,56 L48,63 C48,63.55 48.45,64 49,64 L59,64 C59.55,64 60,63.55 60,63 L60,56 C60,55.45 59.55,55 59,55 Z"
+        android:fillColor="#00E5FF" />
+
+    <!-- Keyhole -->
+    <path
+        android:pathData="M54,58 A1,1 0 1 0 54,60 A1,1 0 1 0 54,58 Z"
+        android:fillColor="#0B132B" />
+</vector>
