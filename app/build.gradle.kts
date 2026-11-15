@@ -15,12 +15,12 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.photo.gallery"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.photo.gallery"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 1
         versionName = "1.0.0"
 
