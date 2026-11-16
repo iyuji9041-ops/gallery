@@ -438,7 +438,7 @@ fun MainGridScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Security,
+                                imageVector = Icons.Default.Shield,
                                 contentDescription = null,
                                 tint = BentoAccent,
                                 modifier = Modifier.size(32.dp)
