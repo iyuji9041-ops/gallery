@@ -9,6 +9,7 @@ import androidx.biometric.BiometricPrompt
 import com.google.crypto.tink.subtle.AesGcmHkdfStreaming
 import com.photo.gallery.data.local.dao.SecurityDao
 import com.photo.gallery.data.local.model.HiddenMediaEntity
+import com.photo.gallery.util.GalleryLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -161,21 +162,38 @@ class VaultCryptoManager(private val context: Context) {
     }
 
     private fun ensureMasterKeyInitialized() {
-        if (!masterKeyEncFile.exists()) {
+        if (!masterKeyEncFile.exists() || masterKeyEncFile.length() < GCM_IV_LENGTH + 16) {
             val rawMaster = ByteArray(MASTER_KEY_SIZE)
             secureRandom.nextBytes(rawMaster)
             try {
-                val kek = getOrCreateKek()
-                val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-                val iv = ByteArray(GCM_IV_LENGTH)
-                secureRandom.nextBytes(iv)
-                cipher.init(Cipher.ENCRYPT_MODE, kek, GCMParameterSpec(GCM_TAG_LENGTH, iv))
+                var kek = getOrCreateKek()
+                var cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                try {
+                    // Android KeyStore enforces randomized encryption by default;
+                    // caller-provided IVs are not permitted in ENCRYPT_MODE.
+                    // The system generates a random 12-byte IV retrieved via cipher.iv.
+                    cipher.init(Cipher.ENCRYPT_MODE, kek)
+                } catch (e: Exception) {
+                    GalleryLog.w("VaultCryptoManager") { "AndroidKeyStore KEK init failed (${e.message}), falling back to software key" }
+                    kek = getFallbackSoftwareKey(KEK_ALIAS)
+                    cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                    cipher.init(Cipher.ENCRYPT_MODE, kek)
+                }
+
+                val iv = cipher.iv ?: error("Cipher IV cannot be null")
                 val encryptedKey = cipher.doFinal(rawMaster)
 
-                FileOutputStream(masterKeyEncFile).use { out ->
+                val tempFile = File(keyDir, "master.key.enc.tmp")
+                FileOutputStream(tempFile).use { out ->
                     out.write(iv)
                     out.write(encryptedKey)
                 }
+                if (!tempFile.renameTo(masterKeyEncFile)) {
+                    tempFile.copyTo(masterKeyEncFile, overwrite = true)
+                    tempFile.delete()
+                }
+            } catch (e: Exception) {
+                GalleryLog.e("VaultCryptoManager", e) { "Failed to initialize master key" }
             } finally {
                 Arrays.fill(rawMaster, 0.toByte())
             }
@@ -187,9 +205,9 @@ class VaultCryptoManager(private val context: Context) {
     @Synchronized
     fun unlockWithKeystore(): Boolean {
         if (isUnlocked) return true
-        if (!masterKeyEncFile.exists()) return false
+        if (!masterKeyEncFile.exists() || masterKeyEncFile.length() < GCM_IV_LENGTH + 16) return false
 
-        try {
+        return try {
             val fileBytes = masterKeyEncFile.readBytes()
             if (fileBytes.size < GCM_IV_LENGTH + 16) return false
             val iv = fileBytes.copyOfRange(0, GCM_IV_LENGTH)
@@ -200,9 +218,23 @@ class VaultCryptoManager(private val context: Context) {
             cipher.init(Cipher.DECRYPT_MODE, kek, GCMParameterSpec(GCM_TAG_LENGTH, iv))
             val decryptedMaster = cipher.doFinal(cipherText)
             activeMasterKey = decryptedMaster
-            return true
+            true
         } catch (e: Exception) {
-            return false
+            GalleryLog.w("VaultCryptoManager") { "Keystore unlock failed (${e.message}), trying fallback software key" }
+            try {
+                val fileBytes = masterKeyEncFile.readBytes()
+                val iv = fileBytes.copyOfRange(0, GCM_IV_LENGTH)
+                val cipherText = fileBytes.copyOfRange(GCM_IV_LENGTH, fileBytes.size)
+                val swKek = getFallbackSoftwareKey(KEK_ALIAS)
+                val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                cipher.init(Cipher.DECRYPT_MODE, swKek, GCMParameterSpec(GCM_TAG_LENGTH, iv))
+                val decryptedMaster = cipher.doFinal(cipherText)
+                activeMasterKey = decryptedMaster
+                true
+            } catch (e2: Exception) {
+                GalleryLog.e("VaultCryptoManager", e2) { "Both Keystore and fallback software key unlock failed" }
+                false
+            }
         }
     }
 
@@ -213,14 +245,20 @@ class VaultCryptoManager(private val context: Context) {
         return try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.ENCRYPT_MODE, bioKek)
-            val iv = cipher.iv
+            val iv = cipher.iv ?: error("Biometric cipher IV cannot be null")
             val encrypted = cipher.doFinal(master)
-            FileOutputStream(biometricMasterKeyEncFile).use { out ->
+            val tempFile = File(keyDir, "master.bio.enc.tmp")
+            FileOutputStream(tempFile).use { out ->
                 out.write(iv)
                 out.write(encrypted)
             }
+            if (!tempFile.renameTo(biometricMasterKeyEncFile)) {
+                tempFile.copyTo(biometricMasterKeyEncFile, overwrite = true)
+                tempFile.delete()
+            }
             true
         } catch (e: Exception) {
+            GalleryLog.e("VaultCryptoManager", e) { "Failed to setup biometric key" }
             false
         }
     }

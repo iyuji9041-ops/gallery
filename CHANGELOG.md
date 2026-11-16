@@ -2,6 +2,14 @@
 
 All notable changes to Secure Gallery are documented in this file.
 
+## [1.2.1] - Hotfix: Startup Crash on Android KeyStore Caller-Provided IV
+
+### Fixed
+- **App Startup Crash (`InvalidAlgorithmParameterException: Caller-provided IV not permitted`)**:
+  - **Root Cause**: On real devices (such as Xiaomi/MIUI HyperOS), Android KeyStore enforces randomized encryption by default and throws `InvalidAlgorithmParameterException` if a caller-provided IV is passed to `Cipher.init(Cipher.ENCRYPT_MODE, kek, GCMParameterSpec(...))` when wrapping the random master key in `ensureMasterKeyInitialized()`.
+  - **Fix**: Removed caller-provided IV for KeyStore encryption; initialized cipher via `cipher.init(Cipher.ENCRYPT_MODE, kek)` and retrieved the system-generated 12-byte IV via `cipher.iv`. Added graceful fallback to software key, defensive file length verification, and atomic file replacement via temporary files.
+  - Added unit test `testKeystoreAesGcmRandomizedIvEncryptionRoundTrip` verifying randomized IV generation and subsequent decryption round-trip.
+
 ## [1.2.0] - Phase 3 & Phase 4: Functional Bug Fixes & Floating Pill Navigation Bar
 
 ### Added

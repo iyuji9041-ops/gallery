@@ -73,21 +73,28 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: output-apks/*.apk
-          tag_name: v1.2.0
-          name: "Gallery v1.2.0 (Phase 3 & 4: Functional Hardening, Migrations & Pill Navigation)"
+          tag_name: v1.2.1
+          name: "Gallery v1.2.1 (Hotfix: Startup Crash on Android KeyStore Caller-Provided IV)"
           body: |
-            ## Gallery Android Application v1.2.0 - Phase 3 & 4 Release
+            ## Gallery Android Application v1.2.1 - Hotfix Release
 
-            ### Phase 3 Functional Fixes:
+            ### Hotfix:
+            - **Fixed App Startup Crash (`InvalidAlgorithmParameterException: Caller-provided IV not permitted`)**:
+              Android KeyStore enforces randomized encryption by default and strictly rejects caller-provided IVs in `ENCRYPT_MODE`.
+              Fixed `VaultCryptoManager.ensureMasterKeyInitialized` to let the system generate a secure random 12-byte IV via `cipher.init(Cipher.ENCRYPT_MODE, kek)` and retrieve it via `cipher.iv`. Added fallback handling and atomic file writes.
+
+            ### Phase 3 & 4 Features:
             - **No False 'Hidden' Success**: Verified copy checksum before requesting Scoped Storage deletion consent; never leaves originals silently visible.
             - **Duplicate Row Race Fix**: Single insert path with -1 error detection and full metadata preservation (dateTaken, folder, original name).
             - **Video & Photo Restore**: Correct collection selection (Images vs Video), original relative path preservation, IS_PENDING handling, and MediaStore rollback on failure.
-            - **Non-Destructive Room Migrations**: Removed destructive migration fallback; added explicit Migrations (1->2 unique index, 2->3 encryption metadata) with exported schemas.
+            - **Non-Destructive Room Migrations**: Explicit non-destructive migrations (1->2 unique index, 2->3 encryption metadata) with exported schemas.
             - **Reliable Deletion Result**: Returns Success only when rows > 0 or dialog confirmed; handles cancellation and partial failures.
             - **Real Library & Permissions**: Removed fake Unsplash demo photos and stripped INTERNET permission; added permission denied and partial access UI states.
             - **Live Media Updates**: MediaStore ContentObserver with 500ms debounce and lifecycle ON_RESUME refresh.
             - **Hierarchical Back Navigation**: Back returns from child tabs to Photos first; leaving vault locks it; predictive back supported.
             - **Performance & ExoPlayer**: Optimized LazyVerticalGrid with stable keys, contentType, downscaled thumbnails, and ExoPlayer release on swipe.
+            - **PillNavigationBar**: Floating capsule navigation bar with Bento styling, elevation, and talkback Role.Tab semantics.
+            - **Bottom Content Padding**: 96.dp bottom padding for grid items, ensuring zero content overlap across 3-button/gesture nav and font scale 1.3+.
             - **Debug-Only Logging**: Secure GalleryLog wrapper stripping all logging in release builds.
 
             ### Phase 4 Floating Pill Navigation:

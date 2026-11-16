@@ -155,4 +155,34 @@ class VaultCryptoTest {
         seekChannel.close()
         tempFile.delete()
     }
+
+    @Test
+    fun testKeystoreAesGcmRandomizedIvEncryptionRoundTrip() {
+        // Simulates Android KeyStore randomized encryption where caller-provided IVs are rejected
+        val keyGen = javax.crypto.KeyGenerator.getInstance("AES")
+        keyGen.init(256)
+        val kek = keyGen.generateKey()
+
+        val rawMasterKey = ByteArray(32).also { SecureRandom().nextBytes(it) }
+
+        // Must init WITHOUT caller-provided IV
+        val encCipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+        encCipher.init(javax.crypto.Cipher.ENCRYPT_MODE, kek)
+        val generatedIv = encCipher.iv
+        org.junit.Assert.assertNotNull("System-generated IV must not be null", generatedIv)
+        assertEquals("Standard GCM IV must be 12 bytes", 12, generatedIv.size)
+
+        val encryptedKey = encCipher.doFinal(rawMasterKey)
+
+        // Decryption must succeed with the generated IV
+        val decCipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+        decCipher.init(
+            javax.crypto.Cipher.DECRYPT_MODE,
+            kek,
+            javax.crypto.spec.GCMParameterSpec(128, generatedIv)
+        )
+        val decryptedKey = decCipher.doFinal(encryptedKey)
+
+        assertArrayEquals("Decrypted master key must match original exactly", rawMasterKey, decryptedKey)
+    }
 }
