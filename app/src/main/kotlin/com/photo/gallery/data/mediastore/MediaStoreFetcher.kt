@@ -3,6 +3,7 @@ package com.photo.gallery.data.mediastore
 import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
+import androidx.core.net.toUri
 import android.os.Build
 import android.provider.MediaStore
 import com.photo.gallery.data.model.AlbumItem
@@ -249,7 +250,7 @@ class MediaStoreFetcher(private val context: Context) {
             val isLocked = lockedPaths.contains(fakePath) || lockedAlbums.contains(album) || (name.contains("Private") || name.contains("ID"))
             MediaItem(
                 id = -(index + 1).toLong(),
-                uri = Uri.parse(url),
+                uri = url.toUri(),
                 path = fakePath,
                 displayName = name,
                 albumName = album,

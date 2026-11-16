@@ -421,7 +421,8 @@ private fun PhotoPage(item: MediaItem, onTap: () -> Unit, onSwipeDownDismiss: ()
  * so both bars appear/disappear together, in sync, exactly when the user taps the
  * video (which PlayerView already detects correctly on its own).
  */
-@OptIn(UnstableApi::class)
+@androidx.annotation.OptIn(UnstableApi::class)
+@kotlin.OptIn(UnstableApi::class)
 @Composable
 private fun VideoPage(uri: Uri, onControlsVisibilityChanged: (Boolean) -> Unit) {
     val context = LocalContext.current

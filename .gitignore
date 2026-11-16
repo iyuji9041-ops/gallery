@@ -13,3 +13,4 @@ keystore.properties
 *.keystore
 *.apk
 *.aab
+lint-reports/
