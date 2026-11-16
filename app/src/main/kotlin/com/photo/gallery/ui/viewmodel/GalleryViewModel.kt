@@ -361,6 +361,15 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(activeViewerItem = null, activeExifData = null, showExifDialog = false) }
     }
 
+    fun onViewerPageChanged(item: MediaItem) {
+        _uiState.update { it.copy(activeViewerItem = item) }
+        loadExifData(item)
+    }
+
+    fun toggleMediaLock(item: MediaItem) {
+        requestToggleMediaLock(item)
+    }
+
     fun toggleExifDialog(show: Boolean? = null) {
         _uiState.update {
             val newShow = show ?: !it.showExifDialog
@@ -454,7 +463,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     private fun executeDeleteMedia(item: MediaItem) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            when (val result = deletionHandler.deleteSingleMedia(item.uri, item.path)) {
+            when (val result = deletionHandler.deleteMedia(item.uri, item.path)) {
                 is DeletionResult.Success -> {
                     allMediaCache = allMediaCache.filterNot { it.id == item.id }
                     securityDao.deleteLockedByPath(item.path)
