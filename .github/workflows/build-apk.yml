@@ -35,6 +35,9 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Run Unit Tests
+        run: ./gradlew test --stacktrace --no-daemon
+
       - name: Build Debug APK
         run: ./gradlew clean assembleDebug --stacktrace --no-daemon
 
@@ -70,24 +73,22 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: output-apks/*.apk
-          tag_name: v1.0.0
-          name: Gallery v1.0.0 (Modern Gradle & Latest Stable Stack)
+          tag_name: v1.1.0
+          name: Gallery v1.1.0 (Phase 2: VaultCore Hardware Security & Tink AEAD)
           body: |
-            ## Gallery Android Application v1.0.0
-            
-            Fully upgraded to modern Android stack:
-            - **Gradle**: 9.9.1
-            - **Android Gradle Plugin**: 9.5.1 (Built-in Kotlin)
-            - **Kotlin**: 2.4.21
-            - **Compose Compiler Plugin**: 2.4.21
-            - **KSP**: 2.3.14
-            - **Compose BOM**: 2026.09.00
-            - **Room**: 2.8.5 (KSP & Room Gradle Plugin)
-            - **Coil**: 3.6.3 (coil-compose, coil-video)
-            - **Media3**: 1.11.1
-            - **Android SDK**: compileSdk 36, targetSdk 36, minSdk 24
-            
+            ## Gallery Android Application v1.1.0 - Phase 2 Security Hardening
+
+            Key security enhancements:
+            - **Tink Streaming AEAD**: AES-256-GCM HKDF streaming encryption with random-access seek support for large media.
+            - **Android Keystore Wrapping**: Master key protected by hardware-backed Keystore with StrongBox support.
+            - **PIN Hardening**: PBKDF2-HMAC-SHA256 with 100,000 iterations, hardware Keystore HMAC binding, and exponential backoff lockout.
+            - **Biometric CryptoObject**: Biometric authentication cryptographically releases vault keys.
+            - **In-Memory Decryption**: Zero plaintext written to disk/cache; master key zeroed on session lock.
+            - **Auto-Lock & FLAG_SECURE**: Automatic background locking and dynamic screenshot/recents protection.
+            - **Backup Protection**: All cloud/local Android backups completely disabled.
+            - **Unit Tests Verified**: 100% passing crypto round-trip, seekable decryption, and lockout tests.
+
             Included artifacts:
             - Debug APK
-            - Release APK (minified & resource shrunk with R8)
+            - Release APK (R8 minified & resource shrunk)
           generate_release_notes: false

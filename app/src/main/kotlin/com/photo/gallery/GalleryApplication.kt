@@ -5,22 +5,38 @@ import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import coil3.video.VideoFrameDecoder
+import com.photo.gallery.security.crypto.EncryptedVaultFetcher
+import com.photo.gallery.security.crypto.EncryptedVaultKeyer
+import com.photo.gallery.security.crypto.VaultCryptoManager
 
 /**
- * BUG FIX: video thumbnails weren't showing anywhere (grid, albums, vault) because
- * Coil's default ImageLoader only knows how to decode image formats - it has no idea
- * how to pull a preview frame out of an .mp4/.mkv/etc. Registering VideoFrameDecoder
- * here (via SingletonImageLoader.Factory, which Coil automatically picks up from the
- * Application class app-wide) means every AsyncImage(...) call in the app - grid
- * thumbnails, album covers, the vault grid - can now render a real frame from a
- * video file, with zero changes needed at each individual call site.
+ * Gallery Application configuration:
+ * 1. VideoFrameDecoder for playing video thumbnails.
+ * 2. EncryptedVaultFetcher & EncryptedVaultKeyer for decrypting vault items in-memory.
  */
 class GalleryApplication : Application(), SingletonImageLoader.Factory {
+
+    lateinit var cryptoManager: VaultCryptoManager
+        private set
+
+    override fun onCreate() {
+        super.onCreate()
+        instance = this
+        cryptoManager = VaultCryptoManager(this)
+    }
+
     override fun newImageLoader(context: PlatformContext): ImageLoader {
         return ImageLoader.Builder(context)
             .components {
+                add(EncryptedVaultFetcher.Factory(cryptoManager))
+                add(EncryptedVaultKeyer(cryptoManager))
                 add(VideoFrameDecoder.Factory())
             }
             .build()
+    }
+
+    companion object {
+        lateinit var instance: GalleryApplication
+            private set
     }
 }

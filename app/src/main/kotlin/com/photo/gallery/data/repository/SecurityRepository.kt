@@ -1,6 +1,8 @@
 package com.photo.gallery.data.repository
 
 import android.net.Uri
+import com.photo.gallery.data.local.AutoLockDelay
+import com.photo.gallery.data.local.PinVerifyResult
 import com.photo.gallery.data.local.SecurityPreferences
 import com.photo.gallery.data.local.SecuritySettings
 import com.photo.gallery.data.local.dao.SecurityDao
@@ -14,7 +16,7 @@ import kotlinx.coroutines.flow.first
 class SecurityRepository(
     private val securityDao: SecurityDao,
     private val securityPreferences: SecurityPreferences,
-    private val vaultManager: VaultManager
+    val vaultManager: VaultManager
 ) {
     val allLockedMedia: Flow<List<LockedMediaEntity>> = securityDao.getAllLockedMedia()
     val lockedAlbumNames: Flow<List<String>> = securityDao.getLockedAlbumNames()
@@ -93,7 +95,7 @@ class SecurityRepository(
         securityPreferences.setPin(pin)
     }
 
-    suspend fun verifyPin(pin: String): Boolean {
+    suspend fun verifyPin(pin: String): PinVerifyResult {
         return securityPreferences.verifyPin(pin)
     }
 
@@ -109,7 +111,31 @@ class SecurityRepository(
         securityPreferences.setVaultSecretCode(code)
     }
 
+    suspend fun verifyVaultSecretCode(code: String): Boolean {
+        return securityPreferences.verifyVaultSecretCode(code)
+    }
+
     suspend fun markVaultTutorialSeen() {
         securityPreferences.markVaultTutorialSeen()
+    }
+
+    suspend fun setSecureModeAppWide(enabled: Boolean) {
+        securityPreferences.setSecureModeAppWide(enabled)
+    }
+
+    suspend fun setAutoLockDelay(delay: AutoLockDelay) {
+        securityPreferences.setAutoLockDelay(delay)
+    }
+
+    suspend fun reconcileVault() {
+        vaultManager.reconcileVault()
+    }
+
+    suspend fun migrateLegacyVaultFiles(onProgress: ((Int, Int) -> Unit)? = null) {
+        vaultManager.cryptoManager.migrateLegacyVaultFiles(
+            vaultDir = vaultManager.vaultDirectory,
+            securityDao = securityDao,
+            onProgress = onProgress
+        )
     }
 }

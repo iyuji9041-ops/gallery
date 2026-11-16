@@ -1,7 +1,7 @@
 package com.photo.gallery.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,6 +52,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.photo.gallery.data.local.AutoLockDelay
 import com.photo.gallery.data.local.SecuritySettings
 import com.photo.gallery.ui.theme.BentoAccent
 import com.photo.gallery.ui.theme.BentoAccentContainer
@@ -67,11 +68,6 @@ import com.photo.gallery.ui.theme.BentoTextPrimary
 import com.photo.gallery.ui.theme.BentoTextSecondary
 import com.photo.gallery.ui.theme.BentoTextTertiary
 
-/**
- * Settings Screen styled with Bento Grid aesthetic:
- * rounded-[28px] containers, #252429 backgrounds, #44474E borders,
- * lavender high-contrast switches and badges.
- */
 @Composable
 fun SettingsScreen(
     securitySettings: SecuritySettings,
@@ -79,7 +75,9 @@ fun SettingsScreen(
     onSetPinClick: () -> Unit,
     onToggleBiometrics: (Boolean) -> Unit,
     onToggleDeletionLock: (Boolean) -> Unit,
-    onRequestChangeVaultCode: () -> Unit
+    onRequestChangeVaultCode: () -> Unit,
+    onToggleSecureModeAppWide: (Boolean) -> Unit = {},
+    onSelectAutoLockDelay: (AutoLockDelay) -> Unit = {}
 ) {
 
     Column(
@@ -132,7 +130,7 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Master PIN Section
+            // Master PIN Section (Problem 2 & 11)
             BentoSettingsCard(title = "Authentication Credentials") {
                 Row(
                     modifier = Modifier
@@ -159,8 +157,17 @@ fun SettingsScreen(
                                 fontWeight = FontWeight.SemiBold,
                                 color = BentoTextPrimary
                             )
+                            val pinCopy = if (securitySettings.hasPinSet) {
+                                if (securitySettings.isPinUpgradeAvailable) {
+                                    "Configured (4-digit • Upgrade to 6+ available)"
+                                } else {
+                                    "Configured (PBKDF2-HMAC-SHA256, 100k rounds + Keystore Hardware-bound)"
+                                }
+                            } else {
+                                "Not Configured"
+                            }
                             Text(
-                                text = if (securitySettings.hasPinSet) "Configured (Salted SHA-256)" else "Not Configured",
+                                text = pinCopy,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (securitySettings.hasPinSet) BentoGreen else BentoAmber
                             )
@@ -211,7 +218,7 @@ fun SettingsScreen(
                                     color = BentoTextPrimary
                                 )
                                 Text(
-                                    text = "Unlock with fingerprint or face",
+                                    text = "Unlock with hardware-bound fingerprint/face key",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = BentoTextSecondary
                                 )
@@ -232,8 +239,7 @@ fun SettingsScreen(
                     }
                 }
 
-                // Vault Access Code - replaces the removed bottom-nav "VAULT" tab.
-                // Typing this phrase into the search bar opens the hidden vault.
+                // Vault Access Code (Problem 9 - never show in plaintext)
                 Spacer(modifier = Modifier.height(14.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -259,7 +265,7 @@ fun SettingsScreen(
                                 color = BentoTextPrimary
                             )
                             Text(
-                                text = "Type your secret phrase in search to open the vault",
+                                text = if (securitySettings.hasSecretCodeSet) "Secret phrase configured (hashed)" else "Not set",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = BentoTextSecondary
                             )
@@ -280,7 +286,7 @@ fun SettingsScreen(
                 }
             }
 
-            // Flagship Feature: Deletion Lock
+            // Flagship Feature: Deletion Lock (Problem 11 clarification)
             BentoSettingsCard(title = "Flagship Protection") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -306,7 +312,7 @@ fun SettingsScreen(
                                 color = BentoTextPrimary
                             )
                             Text(
-                                text = "Require PIN or biometrics before any locked item can be deleted",
+                                text = "Requires authentication to delete locked items inside this app only. (Cannot prevent deletion from other apps or file managers).",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = BentoTextSecondary
                             )
@@ -327,28 +333,99 @@ fun SettingsScreen(
                 }
             }
 
-            // Architecture & Privacy Details Card
+            // Screen & Auto-Lock Security (Problem 4 & 5)
+            BentoSettingsCard(title = "Vault Privacy & Session") {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    // FLAG_SECURE App-wide Toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "App-wide Screenshot & Recents Protection",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = BentoTextPrimary
+                            )
+                            Text(
+                                text = "Blocks screenshots and masks app preview in Android Recents app-wide. (Vault is always protected automatically).",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = BentoTextSecondary
+                            )
+                        }
+                        Switch(
+                            checked = securitySettings.secureModeAppWide,
+                            onCheckedChange = onToggleSecureModeAppWide,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = BentoAccentContainer,
+                                checkedTrackColor = BentoAccent,
+                                uncheckedThumbColor = BentoTextTertiary,
+                                uncheckedTrackColor = BentoSurfaceElevated
+                            )
+                        )
+                    }
+
+                    // Auto-Lock Background Delay
+                    Column {
+                        Text(
+                            text = "Auto-Lock Delay in Background",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = BentoTextPrimary
+                        )
+                        Text(
+                            text = "How quickly the vault locks and clears key material when leaving the app:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = BentoTextSecondary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            AutoLockDelay.values().forEach { delay ->
+                                val selected = securitySettings.autoLockDelay == delay
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(if (selected) BentoAccent else BentoSurfaceElevated)
+                                        .clickable { onSelectAutoLockDelay(delay) }
+                                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        text = delay.displayName,
+                                        color = if (selected) BentoAccentContainer else BentoTextPrimary,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Architecture & Privacy Details Card (Problem 1, 6, 7, 8)
             BentoSettingsCard(title = "VaultCore Architecture") {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     FeatureDetailRow(
                         icon = Icons.Default.Lock,
-                        title = "Local Room Persistence",
-                        desc = "Locks are mapped via absolute file paths & SHA hashes to survive media re-indexing."
+                        title = "Tink Streaming AEAD Encryption",
+                        desc = "AES-256-GCM HKDF streaming encryption with hardware-backed Keystore key wrapping. Decrypted on the fly; zero plaintext on disk."
                     )
                     FeatureDetailRow(
                         icon = Icons.Default.Security,
-                        title = ".nomedia Isolated Vault",
-                        desc = "Private files reside in internal app storage invisible to external scanners."
+                        title = "Zero Disk/Cache Decryption",
+                        desc = "Video streams and thumbnails decode directly into memory. Keystore master key zeroed on session lock."
                     )
                     FeatureDetailRow(
                         icon = Icons.Default.Shield,
-                        title = "Background Vault Listener",
-                        desc = "Real-time FileObserver monitors directory changes, auto-restoring .nomedia and syncing manually added or moved files."
+                        title = "Internal Storage Only",
+                        desc = "Vault resides strictly in private app filesDir. All external storage directories are excluded."
                     )
                     FeatureDetailRow(
                         icon = Icons.Default.Info,
                         title = "Zero Cloud Leakage",
-                        desc = "100% offline, privacy-first design. No analytics or tracking."
+                        desc = "Android cloud and local backups are completely disabled across all storage domains."
                     )
                 }
             }
@@ -362,22 +439,20 @@ private fun BentoSettingsCard(
     content: @Composable () -> Unit
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(28.dp))
-            .border(1.dp, BentoBorder, RoundedCornerShape(28.dp)),
-        colors = CardDefaults.cardColors(containerColor = BentoSurfaceCard)
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = BentoSurfaceCard),
+        border = androidx.compose.foundation.BorderStroke(1.dp, BentoBorder)
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = title.uppercase(),
                 style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
                 color = BentoAccent,
-                letterSpacing = 1.2.sp,
-                fontSize = 11.sp
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.2.sp
             )
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             content()
         }
     }
@@ -398,20 +473,20 @@ private fun FeatureDetailRow(
             contentDescription = null,
             tint = BentoAccent,
             modifier = Modifier
+                .size(18.dp)
                 .padding(top = 2.dp)
-                .size(16.dp)
         )
         Spacer(modifier = Modifier.width(10.dp))
         Column {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.SemiBold,
                 color = BentoTextPrimary
             )
             Text(
                 text = desc,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.labelSmall,
                 color = BentoTextSecondary,
                 fontSize = 12.sp
             )
@@ -420,17 +495,15 @@ private fun FeatureDetailRow(
 }
 
 /**
- * Lets the user change the search-bar phrase that opens the hidden vault (default
- * "\vault"). Blank input is rejected (falls back to the previous code) so the user
- * can never accidentally lock themselves out of the vault entry point entirely.
+ * Lets user set a new secret phrase that triggers the hidden vault from the search bar.
+ * Never displays previous code in plaintext (Problem 9).
  */
 @Composable
 fun VaultCodeEditDialog(
-    currentCode: String,
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var text by remember { mutableStateOf(currentCode) }
+    var text by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -441,7 +514,7 @@ fun VaultCodeEditDialog(
         text = {
             Column {
                 Text(
-                    text = "Whatever you type here, typing it into the search bar will open the vault.",
+                    text = "Enter a new secret phrase. Typing this phrase into the search bar will open the Hidden Vault.",
                     color = BentoTextSecondary,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -450,6 +523,7 @@ fun VaultCodeEditDialog(
                     value = text,
                     onValueChange = { text = it },
                     singleLine = true,
+                    placeholder = { Text("Enter secret phrase...", color = BentoTextTertiary) },
                     colors = TextFieldDefaults.colors(
                         focusedTextColor = BentoTextPrimary,
                         unfocusedTextColor = BentoTextPrimary,

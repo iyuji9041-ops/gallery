@@ -427,10 +427,23 @@ private fun PhotoPage(item: MediaItem, onTap: () -> Unit, onSwipeDownDismiss: ()
 private fun VideoPage(uri: Uri, onControlsVisibilityChanged: (Boolean) -> Unit) {
     val context = LocalContext.current
     val exoPlayer = remember(uri) {
-        ExoPlayer.Builder(context).build().apply {
-            setMediaItem(Media3MediaItem.fromUri(uri))
-            prepare()
-            playWhenReady = true
+        val app = context.applicationContext as? com.photo.gallery.GalleryApplication
+        val isVaultVideo = uri.path?.contains("/vault/") == true
+        if (isVaultVideo && app != null) {
+            val dataSourceFactory = com.photo.gallery.security.crypto.EncryptedMedia3DataSource.Factory(app.cryptoManager)
+            val mediaSource = androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(dataSourceFactory)
+                .createMediaSource(Media3MediaItem.fromUri(uri))
+            ExoPlayer.Builder(context).build().apply {
+                setMediaSource(mediaSource)
+                prepare()
+                playWhenReady = true
+            }
+        } else {
+            ExoPlayer.Builder(context).build().apply {
+                setMediaItem(Media3MediaItem.fromUri(uri))
+                prepare()
+                playWhenReady = true
+            }
         }
     }
 

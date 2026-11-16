@@ -236,7 +236,7 @@ fun HiddenVaultScreen(
                                 color = BentoTextPrimary
                             )
                             Text(
-                                text = "${hiddenItems.size} items • ${if (isMonitoringActive) "Live Directory Monitor Active" else ".nomedia active"}",
+                                text = "${hiddenItems.size} items • AES-256-GCM Hardware Encrypted",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = BentoAccent
                             )

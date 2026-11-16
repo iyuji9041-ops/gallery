@@ -115,6 +115,7 @@ dependencies {
     // Security & Hardware Auth
     implementation(libs.biometric)
     implementation(libs.exifinterface)
+    implementation(libs.tink.android)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.core)
@@ -123,4 +124,7 @@ dependencies {
     // Media3 ExoPlayer
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
+
+    // Unit Testing
+    testImplementation(libs.junit)
 }

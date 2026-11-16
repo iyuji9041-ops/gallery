@@ -21,7 +21,7 @@
 
     <application
         android:name=".GalleryApplication"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:enableOnBackInvokedCallback="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -40,11 +40,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <!-- Background service listener monitoring Hidden Vault directory changes -->
-        <service
-            android:name=".service.VaultMonitorService"
-            android:exported="false" />
     </application>
 
 </manifest>

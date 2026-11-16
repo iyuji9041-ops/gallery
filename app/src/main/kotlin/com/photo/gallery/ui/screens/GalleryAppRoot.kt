@@ -41,11 +41,14 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextFieldDefaults
+import com.photo.gallery.ui.theme.BentoTextTertiary
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -165,10 +168,9 @@ fun GalleryAppRoot(viewModel: GalleryViewModel) {
     BackHandler(enabled = uiState.activeViewerItem == null && !uiState.isSlideshowActive && uiState.isSelectionMode) {
         viewModel.exitSelectionMode()
     }
-    // NOTE: no BackHandler is registered for "vault unlocked" on purpose here -
-    // leaving the vault unlocked when backing out of the app entirely is a separate
-    // security-UX decision (auto-lock-on-background) tracked in the security-features
-    // work, not part of this navigation-crash fix.
+    BackHandler(enabled = uiState.currentTab == GalleryTab.VAULT && uiState.activeViewerItem == null && !uiState.isSlideshowActive && !uiState.isSelectionMode) {
+        viewModel.selectTab(GalleryTab.TIMELINE)
+    }
 
     Scaffold(
         modifier = Modifier
@@ -255,7 +257,7 @@ fun GalleryAppRoot(viewModel: GalleryViewModel) {
                     HiddenVaultScreen(
                         isVaultUnlocked = uiState.isVaultUnlocked,
                         hiddenItems = uiState.hiddenVaultItems,
-                        isMonitoringActive = uiState.isVaultMonitorActive,
+                        isMonitoringActive = uiState.isVaultEncrypted,
                         onRequestUnlock = { viewModel.requestVaultUnlock() },
                         onLockVault = { viewModel.lockVault() },
                         onRestoreItem = { viewModel.restoreFromVault(it) },
@@ -269,7 +271,9 @@ fun GalleryAppRoot(viewModel: GalleryViewModel) {
                         onSetPinClick = { viewModel.requestChangePin() },
                         onToggleBiometrics = { viewModel.setBiometricsEnabled(it) },
                         onToggleDeletionLock = { viewModel.requestToggleDeletionEngine(it) },
-                        onRequestChangeVaultCode = { viewModel.requestChangeVaultCode() }
+                        onRequestChangeVaultCode = { viewModel.requestChangeVaultCode() },
+                        onToggleSecureModeAppWide = { viewModel.setSecureModeAppWide(it) },
+                        onSelectAutoLockDelay = { viewModel.setAutoLockDelay(it) }
                     )
                 }
             }
@@ -318,13 +322,12 @@ fun GalleryAppRoot(viewModel: GalleryViewModel) {
             )
         }
 
-        // One-time Vault-access tutorial: shown once (tracked via
-        // securitySettings.hasSeenVaultTutorial in DataStore) to explain that the
-        // hidden vault - now that it has no labeled bottom-nav tab - is opened by
-        // typing the secret code into the search bar instead.
+        // One-time Vault-access tutorial: lets user set their own secret search-bar code (Problem 9)
         if (!uiState.securitySettings.hasSeenVaultTutorial) {
             VaultTutorialDialog(
-                secretCode = uiState.securitySettings.vaultSecretCode,
+                onSaveSecretCode = { code ->
+                    viewModel.setVaultSecretCode(code)
+                },
                 onDismiss = { viewModel.dismissVaultTutorial() }
             )
         }
@@ -337,21 +340,22 @@ fun GalleryAppRoot(viewModel: GalleryViewModel) {
                 title = auth.title,
                 description = auth.description,
                 hasPinSet = uiState.securitySettings.hasPinSet,
+                configuredPinLength = uiState.securitySettings.pinLength,
                 isBiometricAvailable = uiState.isBiometricAvailable,
                 biometricsEnabled = uiState.securitySettings.biometricsEnabled,
+                biometricCryptoObject = auth.cryptoObject,
                 biometricAuthManager = viewModel.biometricAuthManager,
                 onVerifyPin = { pin, callback -> viewModel.verifyPin(pin, callback) },
                 onSetPin = { pin -> viewModel.setMasterPin(pin) },
+                onBiometricSuccess = { result -> viewModel.onBiometricAuthSuccess(result) },
                 onSuccess = { viewModel.onAuthSuccess(auth.reason, auth.targetItem) },
                 onDismiss = { viewModel.dismissAuthDialog() }
             )
         }
 
-        // Vault Access Code editor - only reachable AFTER requestChangeVaultCode()'s
-        // auth dialog succeeds (see onAuthSuccess -> AuthReason.CHANGE_VAULT_CODE).
+        // Vault Access Code editor - only reachable AFTER requestChangeVaultCode()'s auth succeeds
         if (uiState.showVaultCodeEditor) {
             VaultCodeEditDialog(
-                currentCode = uiState.securitySettings.vaultSecretCode,
                 onConfirm = { newCode ->
                     viewModel.setVaultSecretCode(newCode)
                     viewModel.dismissVaultCodeEditor()
@@ -547,13 +551,17 @@ private fun BentoNavItem(
 }
 
 /**
- * One-time explainer shown the first time the app is opened after the Vault tab was
- * removed from bottom-nav. Explains the new access method (typing the secret code
- * into search) and where to change that code later. Dismissing it permanently marks
- * securitySettings.hasSeenVaultTutorial = true via onDismiss, so it never reappears.
+ * One-time setup tutorial (Problem 9):
+ * Lets the user choose their own secret phrase to trigger the Hidden Vault from search.
+ * Never displays default or previous code in plaintext.
  */
 @Composable
-private fun VaultTutorialDialog(secretCode: String, onDismiss: () -> Unit) {
+private fun VaultTutorialDialog(
+    onSaveSecretCode: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var codeInput by remember { mutableStateOf("") }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = BentoSurface,
@@ -566,7 +574,7 @@ private fun VaultTutorialDialog(secretCode: String, onDismiss: () -> Unit) {
         },
         title = {
             Text(
-                text = "Your Hidden Vault moved",
+                text = "Setup Hidden Vault",
                 color = BentoTextPrimary,
                 fontWeight = FontWeight.Bold
             )
@@ -574,39 +582,49 @@ private fun VaultTutorialDialog(secretCode: String, onDismiss: () -> Unit) {
         text = {
             Column {
                 Text(
-                    text = "For extra privacy, the Vault no longer has its own tab at the bottom of the screen.",
-                    color = BentoTextSecondary
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = "To open it, type this into the search bar:",
-                    color = BentoTextSecondary
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(BentoSurfaceElevated)
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                ) {
-                    Text(
-                        text = secretCode,
-                        color = BentoAccent,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = "You can change this code anytime in Setup \u2192 Vault Access Code.",
+                    text = "For maximum privacy, the Vault is hidden behind the search bar. Choose your own secret access phrase:",
                     color = BentoTextSecondary,
                     fontSize = 13.sp
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = codeInput,
+                    onValueChange = { codeInput = it },
+                    singleLine = true,
+                    placeholder = { Text("e.g. myvault, private123", color = BentoTextTertiary) },
+                    colors = TextFieldDefaults.colors(
+                        focusedTextColor = BentoTextPrimary,
+                        unfocusedTextColor = BentoTextPrimary,
+                        focusedIndicatorColor = BentoAccent,
+                        unfocusedIndicatorColor = BentoTextTertiary,
+                        cursorColor = BentoAccent
+                    ),
+                    modifier = Modifier.fillMaxWidth().testTag("vault_tutorial_code_input")
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Typing this phrase in search opens the vault. Stored securely as a cryptographic hash.",
+                    color = BentoTextSecondary,
+                    fontSize = 12.sp
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(text = "Got it", color = BentoAccent, fontWeight = FontWeight.Bold)
+            TextButton(
+                onClick = {
+                    val trimmed = codeInput.trim()
+                    if (trimmed.isNotEmpty()) {
+                        onSaveSecretCode(trimmed)
+                    } else {
+                        onDismiss()
+                    }
+                }
+            ) {
+                Text(
+                    text = if (codeInput.isNotBlank()) "Save Phrase" else "Skip",
+                    color = BentoAccent,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     )

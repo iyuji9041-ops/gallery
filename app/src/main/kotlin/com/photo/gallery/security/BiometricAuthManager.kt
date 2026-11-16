@@ -19,7 +19,7 @@ class BiometricAuthManager(private val context: Context) {
         return try {
             val biometricManager = BiometricManager.from(context)
             val authenticators = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.BIOMETRIC_WEAK
+                BiometricManager.Authenticators.BIOMETRIC_STRONG
             } else {
                 BiometricManager.Authenticators.BIOMETRIC_STRONG
             }
@@ -31,9 +31,10 @@ class BiometricAuthManager(private val context: Context) {
 
     fun promptBiometric(
         activity: FragmentActivity,
+        cryptoObject: BiometricPrompt.CryptoObject? = null,
         title: String = "Authentication Required",
         subtitle: String = "Verify identity to proceed",
-        onSuccess: () -> Unit,
+        onSuccess: (BiometricPrompt.AuthenticationResult) -> Unit,
         onError: (String) -> Unit,
         onFallbackToPin: () -> Unit
     ) {
@@ -44,7 +45,7 @@ class BiometricAuthManager(private val context: Context) {
             object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     super.onAuthenticationSucceeded(result)
-                    onSuccess()
+                    onSuccess(result)
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
@@ -68,13 +69,17 @@ class BiometricAuthManager(private val context: Context) {
         val promptInfoBuilder = BiometricPrompt.PromptInfo.Builder()
             .setTitle(title)
             .setSubtitle(subtitle)
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+            .setNegativeButtonText("Use Gallery PIN")
 
-        // If DEVICE_CREDENTIAL is used on Android 10+, negative button must not be set
-        // But for maximum compatibility across versions, we provide negative button to use PIN
-        promptInfoBuilder.setNegativeButtonText("Use Gallery PIN")
+        val promptInfo = promptInfoBuilder.build()
 
         try {
-            biometricPrompt.authenticate(promptInfoBuilder.build())
+            if (cryptoObject != null) {
+                biometricPrompt.authenticate(promptInfo, cryptoObject)
+            } else {
+                biometricPrompt.authenticate(promptInfo)
+            }
         } catch (e: Exception) {
             onFallbackToPin()
         }
