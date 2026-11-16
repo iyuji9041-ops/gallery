@@ -78,9 +78,20 @@ class SecurityRepository(
         displayName: String,
         mimeType: String,
         size: Long,
-        dateAdded: Long
-    ): Result<HiddenMediaEntity> {
-        return vaultManager.moveToVault(uri, originalPath, displayName, mimeType, size, dateAdded)
+        dateAdded: Long,
+        dateTaken: Long = 0L,
+        relativeFolder: String? = null
+    ): com.photo.gallery.data.vault.VaultMoveResult {
+        return vaultManager.moveToVault(
+            sourceUri = uri,
+            originalPath = originalPath,
+            displayName = displayName,
+            mimeType = mimeType,
+            size = size,
+            dateAdded = dateAdded,
+            dateTaken = dateTaken,
+            relativeFolder = relativeFolder
+        )
     }
 
     suspend fun restoreFromVault(hiddenItem: HiddenMediaEntity): Result<Uri> {

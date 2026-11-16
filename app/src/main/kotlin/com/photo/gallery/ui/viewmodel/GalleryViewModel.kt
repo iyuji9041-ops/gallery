@@ -1,7 +1,12 @@
 package com.photo.gallery.ui.viewmodel
 
 import android.app.Application
+import android.database.ContentObserver
 import android.net.Uri
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.provider.MediaStore
 import androidx.activity.result.IntentSenderRequest
 import androidx.biometric.BiometricPrompt
 import androidx.lifecycle.AndroidViewModel
@@ -27,6 +32,7 @@ import com.photo.gallery.data.model.ExifData
 import com.photo.gallery.data.model.MediaItem
 import com.photo.gallery.data.repository.SecurityRepository
 import com.photo.gallery.data.vault.VaultManager
+import com.photo.gallery.data.vault.VaultMoveResult
 import com.photo.gallery.security.BiometricAuthManager
 import com.photo.gallery.security.crypto.VaultCryptoManager
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +48,19 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+
+enum class StoragePermissionState {
+    GRANTED,
+    PARTIAL, // Android 14+ READ_MEDIA_VISUAL_USER_SELECTED
+    DENIED
+}
+
+sealed class PendingIntentAction {
+    data class DeleteSingle(val item: MediaItem) : PendingIntentAction()
+    data class DeleteBulk(val items: List<MediaItem>) : PendingIntentAction()
+    data class MoveToVaultSingle(val item: MediaItem, val entity: HiddenMediaEntity) : PendingIntentAction()
+    data class MoveToVaultBulk(val items: List<MediaItem>, val entities: List<HiddenMediaEntity>) : PendingIntentAction()
+}
 
 enum class GalleryTab {
     TIMELINE, ALBUMS, VAULT, SETTINGS
@@ -106,7 +125,8 @@ data class GalleryUiState(
     val pendingDeleteRequest: IntentSenderRequest? = null,
     val toastMessage: String? = null,
     val isBiometricAvailable: Boolean = false,
-    val isVaultEncrypted: Boolean = true
+    val isVaultEncrypted: Boolean = true,
+    val permissionState: StoragePermissionState = StoragePermissionState.GRANTED
 )
 
 class GalleryViewModel(application: Application) : AndroidViewModel(application) {
@@ -127,6 +147,9 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
     private var allMediaCache: List<MediaItem> = emptyList()
     private var autoLockJob: Job? = null
+    private var mediaObserver: ContentObserver? = null
+    private var debounceRefreshJob: Job? = null
+    private var pendingIntentSenderAction: PendingIntentAction? = null
 
     init {
         try {
@@ -136,6 +159,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         } catch (_: Throwable) {}
 
         observeDataSources()
+        registerMediaStoreObserver()
         refreshMedia()
 
         // Reconcile vault on startup (Problem 8)
@@ -167,8 +191,57 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                     autoLockJob?.cancel()
                     autoLockJob = null
                 }
+
+                override fun onResume(owner: LifecycleOwner) {
+                    refreshMedia()
+                }
             })
         } catch (_: Exception) {}
+    }
+
+    private fun registerMediaStoreObserver() {
+        if (mediaObserver != null) return
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean, uri: Uri?) {
+                super.onChange(selfChange, uri)
+                debounceRefreshJob?.cancel()
+                debounceRefreshJob = viewModelScope.launch {
+                    delay(500)
+                    refreshMedia()
+                }
+            }
+        }
+        mediaObserver = observer
+        val resolver = getApplication<Application>().contentResolver
+        try {
+            resolver.registerContentObserver(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                true,
+                observer
+            )
+            resolver.registerContentObserver(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                true,
+                observer
+            )
+        } catch (_: Exception) {}
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        mediaObserver?.let {
+            try {
+                getApplication<Application>().contentResolver.unregisterContentObserver(it)
+            } catch (_: Exception) {}
+            mediaObserver = null
+        }
+    }
+
+    fun updatePermissionState(state: StoragePermissionState) {
+        _uiState.update { it.copy(permissionState = state) }
+        if (state != StoragePermissionState.DENIED) {
+            refreshMedia()
+        }
     }
 
     private fun observeDataSources() {
@@ -477,12 +550,24 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                     filterAndPublishMedia()
                 }
                 is DeletionResult.RequiresIntentSender -> {
+                    pendingIntentSenderAction = PendingIntentAction.DeleteSingle(item)
                     _uiState.update {
                         it.copy(
                             isLoading = false,
                             pendingDeleteRequest = result.intentSenderRequest
                         )
                     }
+                }
+                is DeletionResult.PartialFailure -> {
+                    allMediaCache = allMediaCache.filterNot { it.id == item.id }
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            activeViewerItem = null,
+                            toastMessage = result.message
+                        )
+                    }
+                    filterAndPublishMedia()
                 }
                 is DeletionResult.Error -> {
                     _uiState.update {
@@ -495,9 +580,77 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
     fun onIntentSenderHandled(success: Boolean) {
         _uiState.update { it.copy(pendingDeleteRequest = null) }
+        val action = pendingIntentSenderAction
+        pendingIntentSenderAction = null
+
         if (success) {
-            refreshMedia()
-            _uiState.update { it.copy(activeViewerItem = null, toastMessage = "Item deleted") }
+            when (action) {
+                is PendingIntentAction.DeleteSingle -> {
+                    allMediaCache = allMediaCache.filterNot { it.id == action.item.id }
+                    viewModelScope.launch { securityDao.deleteLockedByPath(action.item.path) }
+                    _uiState.update { it.copy(activeViewerItem = null, toastMessage = "Item deleted") }
+                    filterAndPublishMedia()
+                }
+                is PendingIntentAction.DeleteBulk -> {
+                    val ids = action.items.map { it.id }.toSet()
+                    allMediaCache = allMediaCache.filterNot { ids.contains(it.id) }
+                    viewModelScope.launch {
+                        action.items.forEach { securityDao.deleteLockedByPath(it.path) }
+                    }
+                    _uiState.update {
+                        it.copy(
+                            isSelectionMode = false,
+                            selectedItemIds = emptySet(),
+                            toastMessage = "Deleted ${action.items.size} items"
+                        )
+                    }
+                    filterAndPublishMedia()
+                }
+                is PendingIntentAction.MoveToVaultSingle -> {
+                    allMediaCache = allMediaCache.filterNot { it.id == action.item.id }
+                    _uiState.update {
+                        it.copy(
+                            activeViewerItem = null,
+                            toastMessage = "Moved to Hidden Vault (AES-256-GCM Encrypted)"
+                        )
+                    }
+                    filterAndPublishMedia()
+                }
+                is PendingIntentAction.MoveToVaultBulk -> {
+                    val ids = action.items.map { it.id }.toSet()
+                    allMediaCache = allMediaCache.filterNot { ids.contains(it.id) }
+                    _uiState.update {
+                        it.copy(
+                            isSelectionMode = false,
+                            selectedItemIds = emptySet(),
+                            toastMessage = "Moved ${action.items.size} items to Hidden Vault"
+                        )
+                    }
+                    filterAndPublishMedia()
+                }
+                null -> {
+                    refreshMedia()
+                }
+            }
+        } else {
+            when (action) {
+                is PendingIntentAction.MoveToVaultSingle -> {
+                    _uiState.update {
+                        it.copy(toastMessage = "Item copied to vault, but original remains visible (delete permission declined).")
+                    }
+                }
+                is PendingIntentAction.MoveToVaultBulk -> {
+                    _uiState.update {
+                        it.copy(toastMessage = "Items copied to vault, but originals remain visible (delete permission declined).")
+                    }
+                }
+                is PendingIntentAction.DeleteSingle, is PendingIntentAction.DeleteBulk -> {
+                    _uiState.update {
+                        it.copy(toastMessage = "Deletion canceled by user.")
+                    }
+                }
+                null -> {}
+            }
         }
     }
 
@@ -552,21 +705,37 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                 displayName = item.displayName,
                 mimeType = item.mimeType,
                 size = item.size,
-                dateAdded = item.dateAdded
+                dateAdded = item.dateAdded,
+                dateTaken = item.dateTaken,
+                relativeFolder = item.relativeFolder
             )
-            result.onSuccess {
-                allMediaCache = allMediaCache.filterNot { m -> m.id == item.id }
-                _uiState.update { state ->
-                    state.copy(
-                        isLoading = false,
-                        activeViewerItem = null,
-                        toastMessage = "Moved to Hidden Vault (AES-256-GCM Encrypted)"
-                    )
+            _uiState.update { it.copy(isLoading = false) }
+            when (result) {
+                is VaultMoveResult.Success -> {
+                    allMediaCache = allMediaCache.filterNot { m -> m.id == item.id }
+                    _uiState.update { state ->
+                        state.copy(
+                            activeViewerItem = null,
+                            toastMessage = "Moved to Hidden Vault (AES-256-GCM Encrypted)"
+                        )
+                    }
+                    filterAndPublishMedia()
                 }
-                filterAndPublishMedia()
-            }.onFailure { error ->
-                _uiState.update { state ->
-                    state.copy(isLoading = false, toastMessage = "Failed to encrypt and hide: ${error.message}")
+                is VaultMoveResult.RequiresDeleteConsent -> {
+                    pendingIntentSenderAction = PendingIntentAction.MoveToVaultSingle(item, result.entity)
+                    _uiState.update {
+                        it.copy(pendingDeleteRequest = result.intentSenderRequest)
+                    }
+                }
+                is VaultMoveResult.CopiedOriginalVisible -> {
+                    _uiState.update {
+                        it.copy(toastMessage = result.message)
+                    }
+                }
+                is VaultMoveResult.Error -> {
+                    _uiState.update {
+                        it.copy(toastMessage = "Failed to encrypt and hide: ${result.message}")
+                    }
                 }
             }
         }
@@ -785,31 +954,82 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     fun bulkMoveToVault() {
         val selectedIds = _uiState.value.selectedItemIds
         val selectedItems = _uiState.value.mediaItems.filter { selectedIds.contains(it.id) }
+        if (selectedItems.isEmpty()) return
+
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            var successCount = 0
+            val successEntities = mutableListOf<HiddenMediaEntity>()
+            val successItems = mutableListOf<MediaItem>()
+            val consentUris = mutableListOf<Uri>()
+
             for (item in selectedItems) {
-                val result = securityRepository.moveToVault(
+                val res = securityRepository.moveToVault(
                     uri = item.uri,
                     originalPath = item.path,
                     displayName = item.displayName,
                     mimeType = item.mimeType,
                     size = item.size,
-                    dateAdded = item.dateAdded
+                    dateAdded = item.dateAdded,
+                    dateTaken = item.dateTaken,
+                    relativeFolder = item.relativeFolder
                 )
-                if (result.isSuccess) successCount++
+                when (res) {
+                    is VaultMoveResult.Success -> {
+                        successEntities.add(res.entity)
+                        successItems.add(item)
+                    }
+                    is VaultMoveResult.RequiresDeleteConsent -> {
+                        successEntities.add(res.entity)
+                        successItems.add(item)
+                        consentUris.add(item.uri)
+                    }
+                    is VaultMoveResult.CopiedOriginalVisible -> {
+                        successEntities.add(res.entity)
+                    }
+                    is VaultMoveResult.Error -> {}
+                }
             }
-            val movedIds = selectedItems.take(successCount).map { it.id }.toSet()
-            allMediaCache = allMediaCache.filterNot { movedIds.contains(it.id) }
-            _uiState.update {
-                it.copy(
-                    isLoading = false,
-                    isSelectionMode = false,
-                    selectedItemIds = emptySet(),
-                    toastMessage = "Moved $successCount items to Encrypted Vault"
-                )
+
+            _uiState.update { it.copy(isLoading = false) }
+
+            if (consentUris.isNotEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                try {
+                    val pendingIntent = MediaStore.createDeleteRequest(
+                        getApplication<Application>().contentResolver,
+                        consentUris
+                    )
+                    val request = IntentSenderRequest.Builder(pendingIntent.intentSender).build()
+                    pendingIntentSenderAction = PendingIntentAction.MoveToVaultBulk(successItems, successEntities)
+                    _uiState.update { it.copy(pendingDeleteRequest = request) }
+                } catch (e: Exception) {
+                    _uiState.update {
+                        it.copy(
+                            isSelectionMode = false,
+                            selectedItemIds = emptySet(),
+                            toastMessage = "Copied ${successEntities.size} items to vault; originals remain visible."
+                        )
+                    }
+                }
+            } else if (successItems.isNotEmpty()) {
+                val movedIds = successItems.map { it.id }.toSet()
+                allMediaCache = allMediaCache.filterNot { movedIds.contains(it.id) }
+                _uiState.update {
+                    it.copy(
+                        isSelectionMode = false,
+                        selectedItemIds = emptySet(),
+                        toastMessage = "Moved ${successItems.size} items to Hidden Vault"
+                    )
+                }
+                filterAndPublishMedia()
+            } else {
+                _uiState.update {
+                    it.copy(
+                        isSelectionMode = false,
+                        selectedItemIds = emptySet(),
+                        toastMessage = "Failed to move items to vault"
+                    )
+                }
             }
-            filterAndPublishMedia()
         }
     }
 
@@ -850,12 +1070,13 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                             isLoading = false,
                             isSelectionMode = false,
                             selectedItemIds = emptySet(),
-                            toastMessage = "Deleted ${items.size} items"
+                            toastMessage = "Deleted ${result.deletedCount} items"
                         )
                     }
                     filterAndPublishMedia()
                 }
                 is DeletionResult.RequiresIntentSender -> {
+                    pendingIntentSenderAction = PendingIntentAction.DeleteBulk(items)
                     _uiState.update {
                         it.copy(
                             isLoading = false,
@@ -863,9 +1084,25 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                         )
                     }
                 }
+                is DeletionResult.PartialFailure -> {
+                    refreshMedia()
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            isSelectionMode = false,
+                            selectedItemIds = emptySet(),
+                            toastMessage = result.message
+                        )
+                    }
+                }
                 is DeletionResult.Error -> {
                     _uiState.update {
-                        it.copy(isLoading = false, toastMessage = "Delete failed: ${result.message}")
+                        it.copy(
+                            isLoading = false,
+                            isSelectionMode = false,
+                            selectedItemIds = emptySet(),
+                            toastMessage = "Delete failed: ${result.message}"
+                        )
                     }
                 }
             }

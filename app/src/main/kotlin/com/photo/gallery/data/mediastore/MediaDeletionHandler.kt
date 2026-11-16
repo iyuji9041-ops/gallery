@@ -1,20 +1,27 @@
 package com.photo.gallery.data.mediastore
 
-import android.app.Activity
-import android.app.PendingIntent
 import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import androidx.activity.result.IntentSenderRequest
+import com.photo.gallery.data.model.MediaItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
-import com.photo.gallery.data.model.MediaItem
 
 sealed class DeletionResult {
-    object Success : DeletionResult()
-    data class RequiresIntentSender(val intentSenderRequest: IntentSenderRequest) : DeletionResult()
+    data class Success(val deletedCount: Int) : DeletionResult()
+    data class RequiresIntentSender(
+        val intentSenderRequest: IntentSenderRequest,
+        val targetUris: List<Uri>,
+        val isBulk: Boolean = false
+    ) : DeletionResult()
+    data class PartialFailure(
+        val successCount: Int,
+        val failedCount: Int,
+        val message: String
+    ) : DeletionResult()
     data class Error(val message: String) : DeletionResult()
 }
 
@@ -22,50 +29,49 @@ class MediaDeletionHandler(private val context: Context) {
 
     suspend fun deleteMedia(uri: Uri, path: String): DeletionResult = withContext(Dispatchers.IO) {
         try {
-            // Check if it's a sample/demo web Uri
-            if (uri.scheme == "http" || uri.scheme == "https") {
-                return@withContext DeletionResult.Success
-            }
-
-            // On Android 11+ (API 30+), use createDeleteRequest for scoped storage safety
+            // Android 11+ (API 30+) Scoped Storage
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 try {
-                    // Try direct delete first (works if app created the media)
                     val rows = context.contentResolver.delete(uri, null, null)
                     if (rows > 0) {
-                        return@withContext DeletionResult.Success
+                        return@withContext DeletionResult.Success(rows)
                     }
-                } catch (securityException: SecurityException) {
-                    // Scoped storage requires user confirmation via IntentSender
-                    val pendingIntent = MediaStore.createDeleteRequest(
-                        context.contentResolver,
-                        listOf(uri)
-                    )
-                    val request = IntentSenderRequest.Builder(pendingIntent.intentSender).build()
-                    return@withContext DeletionResult.RequiresIntentSender(request)
+                } catch (_: SecurityException) {
+                    // Fallthrough to createDeleteRequest below
                 } catch (e: Exception) {
-                    // Try createDeleteRequest
+                    return@withContext DeletionResult.Error(e.localizedMessage ?: "Failed to delete item")
+                }
+
+                // If rows == 0 or SecurityException was thrown, request system delete consent
+                return@withContext try {
                     val pendingIntent = MediaStore.createDeleteRequest(
                         context.contentResolver,
                         listOf(uri)
                     )
                     val request = IntentSenderRequest.Builder(pendingIntent.intentSender).build()
-                    return@withContext DeletionResult.RequiresIntentSender(request)
+                    DeletionResult.RequiresIntentSender(request, listOf(uri), isBulk = false)
+                } catch (e: Exception) {
+                    DeletionResult.Error("Could not request delete permission: ${e.localizedMessage}")
                 }
             } else {
-                // API < 30 direct contentResolver delete or file delete
-                val rows = context.contentResolver.delete(uri, null, null)
-                if (rows > 0) {
-                    return@withContext DeletionResult.Success
+                // API < 30 (Android 10 and below)
+                try {
+                    val rows = context.contentResolver.delete(uri, null, null)
+                    if (rows > 0) {
+                        return@withContext DeletionResult.Success(rows)
+                    }
+                } catch (sec: SecurityException) {
+                    return@withContext DeletionResult.Error("Permission denied: ${sec.localizedMessage}")
                 }
+
                 if (path.isNotEmpty()) {
                     val file = File(path)
                     if (file.exists() && file.delete()) {
-                        return@withContext DeletionResult.Success
+                        return@withContext DeletionResult.Success(1)
                     }
                 }
+                return@withContext DeletionResult.Error("Failed to delete item: file not found or write protected")
             }
-            DeletionResult.Success
         } catch (e: Exception) {
             DeletionResult.Error(e.localizedMessage ?: "Failed to delete media item")
         }
@@ -73,9 +79,9 @@ class MediaDeletionHandler(private val context: Context) {
 
     suspend fun deleteMultipleMedia(items: List<MediaItem>): DeletionResult = withContext(Dispatchers.IO) {
         try {
-            val localUris = items.filterNot { it.uri.scheme == "http" || it.uri.scheme == "https" }.map { it.uri }
+            val localUris = items.map { it.uri }
             if (localUris.isEmpty()) {
-                return@withContext DeletionResult.Success
+                return@withContext DeletionResult.Success(0)
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -85,20 +91,41 @@ class MediaDeletionHandler(private val context: Context) {
                         localUris
                     )
                     val request = IntentSenderRequest.Builder(pendingIntent.intentSender).build()
-                    return@withContext DeletionResult.RequiresIntentSender(request)
+                    return@withContext DeletionResult.RequiresIntentSender(request, localUris, isBulk = true)
                 } catch (e: Exception) {
-                    // Fallback to iterating
-                    var hasError = false
+                    // Fall back to iterating
+                    var successCount = 0
+                    var failCount = 0
                     for (item in items) {
-                        deleteMedia(item.uri, item.path)
+                        when (deleteMedia(item.uri, item.path)) {
+                            is DeletionResult.Success -> successCount++
+                            else -> failCount++
+                        }
                     }
-                    return@withContext DeletionResult.Success
+                    return@withContext if (failCount == 0) {
+                        DeletionResult.Success(successCount)
+                    } else if (successCount > 0) {
+                        DeletionResult.PartialFailure(successCount, failCount, "Deleted $successCount items, $failCount failed")
+                    } else {
+                        DeletionResult.Error("Failed to delete selected items: ${e.localizedMessage}")
+                    }
                 }
             } else {
+                var successCount = 0
+                var failCount = 0
                 for (item in items) {
-                    deleteMedia(item.uri, item.path)
+                    when (deleteMedia(item.uri, item.path)) {
+                        is DeletionResult.Success -> successCount++
+                        else -> failCount++
+                    }
                 }
-                return@withContext DeletionResult.Success
+                return@withContext if (failCount == 0) {
+                    DeletionResult.Success(successCount)
+                } else if (successCount > 0) {
+                    DeletionResult.PartialFailure(successCount, failCount, "Deleted $successCount items, $failCount failed")
+                } else {
+                    DeletionResult.Error("Failed to delete items: permission denied or files protected")
+                }
             }
         } catch (e: Exception) {
             DeletionResult.Error(e.localizedMessage ?: "Failed to delete items")

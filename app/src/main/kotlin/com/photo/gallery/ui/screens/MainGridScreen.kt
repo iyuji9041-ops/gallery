@@ -98,6 +98,7 @@ import com.photo.gallery.ui.theme.BentoTextSecondary
 import com.photo.gallery.ui.theme.BentoTextTertiary
 import com.photo.gallery.ui.viewmodel.DateFilterPeriod
 import com.photo.gallery.ui.viewmodel.MediaFilter
+import com.photo.gallery.ui.viewmodel.StoragePermissionState
 
 /**
  * Main media grid adhering strictly to the Bento Grid design theme:
@@ -117,6 +118,9 @@ fun MainGridScreen(
     isSelectionMode: Boolean = false,
     selectedItemIds: Set<Long> = emptySet(),
     isLoading: Boolean,
+    permissionState: StoragePermissionState = StoragePermissionState.GRANTED,
+    onRequestPermission: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     onFilterChange: (MediaFilter) -> Unit,
     onSearchChange: (String) -> Unit,
     onToggleSearch: () -> Unit = {},
@@ -379,8 +383,106 @@ fun MainGridScreen(
                 }
             }
 
-            // Loading State
-            if (isLoading) {
+            // Partial Access Banner (Android 14+ Scoped Storage)
+            if (permissionState == StoragePermissionState.PARTIAL) {
+                Surface(
+                    color = BentoAccentSubtle,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable { onRequestPermission() }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Limited photo access granted",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = BentoAccent,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "Select more...",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = BentoAccent,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            // Permission Denied State
+            if (permissionState == StoragePermissionState.DENIED) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(28.dp))
+                            .background(BentoSurface)
+                            .border(1.dp, BentoBorder, RoundedCornerShape(28.dp))
+                            .padding(32.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape)
+                                .background(BentoSurfaceElevated),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Security,
+                                contentDescription = null,
+                                tint = BentoAccent,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Storage Permission Required",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = BentoTextPrimary
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Private Gallery needs storage access to show your photos and videos. No files leave your device.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = BentoTextSecondary,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(BentoAccent)
+                                    .clickable { onRequestPermission() }
+                                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                            ) {
+                                Text("Grant Access", color = BentoAccentContainer, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(BentoSurfaceElevated)
+                                    .border(1.dp, BentoBorder, RoundedCornerShape(16.dp))
+                                    .clickable { onOpenSettings() }
+                                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                            ) {
+                                Text("App Settings", color = BentoTextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            }
+                        }
+                    }
+                }
+            } else if (isLoading) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -438,12 +540,12 @@ fun MainGridScreen(
             } else {
                 // Bento Vertical Grid
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(3), // was 2 - user requested Xiaomi-Gallery-style 3-column density
+                    columns = GridCells.Fixed(3),
                     contentPadding = PaddingValues(
                         start = 16.dp,
                         end = 16.dp,
                         top = 4.dp,
-                        bottom = if (isSelectionMode) 100.dp else 16.dp
+                        bottom = if (isSelectionMode) 100.dp else 96.dp
                     ),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -453,7 +555,7 @@ fun MainGridScreen(
                 ) {
                     // Bento Hero Card (Full Width Span, shown when not in selection mode)
                     if (!isSelectionMode) {
-                        item(span = { GridItemSpan(2) }) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
                             BentoHeroCard(
                                 mediaCount = mediaItems.size,
                                 selectedAlbum = selectedAlbum,
@@ -468,7 +570,8 @@ fun MainGridScreen(
                     // Grid of Media Thumbnails
                     items(
                         items = mediaItems,
-                        key = { it.id }
+                        key = { it.id },
+                        contentType = { if (it.isVideo) "video" else "photo" }
                     ) { item ->
                         val isSelected = selectedItemIds.contains(item.id)
                         BentoMediaThumbnailItem(

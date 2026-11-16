@@ -128,4 +128,5 @@ dependencies {
 
     // Unit Testing
     testImplementation(libs.junit)
+    testImplementation(libs.room.testing)
 }

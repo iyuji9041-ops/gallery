@@ -1,0 +1,51 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "db1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c",
+    "entities": [
+      {
+        "tableName": "locked_media",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`mediaPath` TEXT NOT NULL, `mediaUriString` TEXT NOT NULL, `contentHash` TEXT, `albumName` TEXT, `isLocked` INTEGER NOT NULL, `lockDate` INTEGER NOT NULL, `isAlbumLocked` INTEGER NOT NULL, PRIMARY KEY(`mediaPath`))",
+        "fields": [
+          { "fieldPath": "mediaPath", "columnName": "mediaPath", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "mediaUriString", "columnName": "mediaUriString", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "contentHash", "columnName": "contentHash", "affinity": "TEXT", "notNull": false },
+          { "fieldPath": "albumName", "columnName": "albumName", "affinity": "TEXT", "notNull": false },
+          { "fieldPath": "isLocked", "columnName": "isLocked", "affinity": "INTEGER", "notNull": true },
+          { "fieldPath": "lockDate", "columnName": "lockDate", "affinity": "INTEGER", "notNull": true },
+          { "fieldPath": "isAlbumLocked", "columnName": "isAlbumLocked", "affinity": "INTEGER", "notNull": true }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [ "mediaPath" ]
+        },
+        "indices": []
+      },
+      {
+        "tableName": "hidden_media",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `originalPath` TEXT NOT NULL, `vaultPath` TEXT NOT NULL, `displayName` TEXT NOT NULL, `mimeType` TEXT NOT NULL, `size` INTEGER NOT NULL, `dateAdded` INTEGER NOT NULL, `dateHidden` INTEGER NOT NULL)",
+        "fields": [
+          { "fieldPath": "id", "columnName": "id", "affinity": "INTEGER", "notNull": true },
+          { "fieldPath": "originalPath", "columnName": "originalPath", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "vaultPath", "columnName": "vaultPath", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "displayName", "columnName": "displayName", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "mimeType", "columnName": "mimeType", "affinity": "TEXT", "notNull": true },
+          { "fieldPath": "size", "columnName": "size", "affinity": "INTEGER", "notNull": true },
+          { "fieldPath": "dateAdded", "columnName": "dateAdded", "affinity": "INTEGER", "notNull": true },
+          { "fieldPath": "dateHidden", "columnName": "dateHidden", "affinity": "INTEGER", "notNull": true }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [ "id" ]
+        },
+        "indices": []
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'db1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c')"
+    ]
+  }
+}

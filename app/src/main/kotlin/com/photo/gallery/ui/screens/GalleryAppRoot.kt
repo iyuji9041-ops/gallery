@@ -102,39 +102,57 @@ fun GalleryAppRoot(viewModel: GalleryViewModel) {
         }
     }
 
+    // Query storage permission state
+    fun queryCurrentPermissionState(): com.photo.gallery.ui.viewmodel.StoragePermissionState {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            val hasImages = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
+            val hasVideos = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED
+            val hasSelected = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED
+            if (hasImages && hasVideos) {
+                com.photo.gallery.ui.viewmodel.StoragePermissionState.GRANTED
+            } else if (hasSelected) {
+                com.photo.gallery.ui.viewmodel.StoragePermissionState.PARTIAL
+            } else {
+                com.photo.gallery.ui.viewmodel.StoragePermissionState.DENIED
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val hasImages = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
+            val hasVideos = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED
+            if (hasImages && hasVideos) com.photo.gallery.ui.viewmodel.StoragePermissionState.GRANTED else com.photo.gallery.ui.viewmodel.StoragePermissionState.DENIED
+        } else {
+            val hasStorage = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+            if (hasStorage) com.photo.gallery.ui.viewmodel.StoragePermissionState.GRANTED else com.photo.gallery.ui.viewmodel.StoragePermissionState.DENIED
+        }
+    }
+
     // Storage Permissions Request launcher
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val anyGranted = permissions.values.any { it }
-        if (anyGranted) {
-            viewModel.refreshMedia()
-        }
+    ) { _ ->
+        val state = queryCurrentPermissionState()
+        viewModel.updatePermissionState(state)
     }
 
     // Check & request permissions on startup
     LaunchedEffect(Unit) {
-        val permissionsToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            listOf(
-                android.Manifest.permission.READ_MEDIA_IMAGES,
-                android.Manifest.permission.READ_MEDIA_VIDEO,
-                android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
-            )
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            listOf(
-                android.Manifest.permission.READ_MEDIA_IMAGES,
-                android.Manifest.permission.READ_MEDIA_VIDEO
-            )
-        } else {
-            listOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
-        }
-
-        val needed = permissionsToRequest.filter {
-            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
-        }
-
-        if (needed.isNotEmpty()) {
-            permissionLauncher.launch(needed.toTypedArray())
+        val state = queryCurrentPermissionState()
+        viewModel.updatePermissionState(state)
+        if (state == com.photo.gallery.ui.viewmodel.StoragePermissionState.DENIED) {
+            val permissionsToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                listOf(
+                    android.Manifest.permission.READ_MEDIA_IMAGES,
+                    android.Manifest.permission.READ_MEDIA_VIDEO,
+                    android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
+                )
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                listOf(
+                    android.Manifest.permission.READ_MEDIA_IMAGES,
+                    android.Manifest.permission.READ_MEDIA_VIDEO
+                )
+            } else {
+                listOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+            permissionLauncher.launch(permissionsToRequest.toTypedArray())
         }
     }
 
@@ -146,19 +164,9 @@ fun GalleryAppRoot(viewModel: GalleryViewModel) {
         }
     }
 
-    // SYSTEM BACK BUTTON HANDLING (bug fix).
-    //
-    // This screen has no NavController back stack - "screens" are just state flags
-    // (activeViewerItem, isSlideshowActive, isSelectionMode) toggled on the single
-    // root Composable. Without an explicit BackHandler, Compose has nothing to
-    // intercept the system back press/gesture with, so it falls through to the
-    // Activity's default behavior and finishes the Activity entirely - which is
-    // exactly the reported bug ("back from photo viewer closes the whole app
-    // instead of returning to the gallery grid").
-    //
-    // Each BackHandler below is only `enabled` while its matching state is true, and
-    // they're declared most-specific-first so exactly one applies at a time:
-    // closing the photo viewer takes priority over exiting selection mode, etc.
+    // SYSTEM BACK BUTTON HANDLING (Problem 8)
+    // Back from Albums, Setup or the vault returns to Photos tab first.
+    // Leaving the vault with back must lock it.
     BackHandler(enabled = uiState.activeViewerItem != null) {
         viewModel.closeViewer()
     }
@@ -168,7 +176,10 @@ fun GalleryAppRoot(viewModel: GalleryViewModel) {
     BackHandler(enabled = uiState.activeViewerItem == null && !uiState.isSlideshowActive && uiState.isSelectionMode) {
         viewModel.exitSelectionMode()
     }
-    BackHandler(enabled = uiState.currentTab == GalleryTab.VAULT && uiState.activeViewerItem == null && !uiState.isSlideshowActive && !uiState.isSelectionMode) {
+    BackHandler(enabled = uiState.currentTab != GalleryTab.TIMELINE && uiState.activeViewerItem == null && !uiState.isSlideshowActive && !uiState.isSelectionMode) {
+        if (uiState.currentTab == GalleryTab.VAULT) {
+            viewModel.lockVault()
+        }
         viewModel.selectTab(GalleryTab.TIMELINE)
     }
 
@@ -193,7 +204,7 @@ fun GalleryAppRoot(viewModel: GalleryViewModel) {
         },
         bottomBar = {
             if (uiState.activeViewerItem == null && !uiState.isSlideshowActive && !uiState.isSelectionMode) {
-                BentoNavigationBar(
+                PillNavigationBar(
                     currentTab = uiState.currentTab,
                     onTabSelected = { viewModel.selectTab(it) }
                 )
@@ -219,6 +230,31 @@ fun GalleryAppRoot(viewModel: GalleryViewModel) {
                         isSelectionMode = uiState.isSelectionMode,
                         selectedItemIds = uiState.selectedItemIds,
                         isLoading = uiState.isLoading,
+                        permissionState = uiState.permissionState,
+                        onRequestPermission = {
+                            val permissionsToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                                listOf(
+                                    android.Manifest.permission.READ_MEDIA_IMAGES,
+                                    android.Manifest.permission.READ_MEDIA_VIDEO,
+                                    android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
+                                )
+                            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                listOf(
+                                    android.Manifest.permission.READ_MEDIA_IMAGES,
+                                    android.Manifest.permission.READ_MEDIA_VIDEO
+                                )
+                            } else {
+                                listOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                            }
+                            permissionLauncher.launch(permissionsToRequest.toTypedArray())
+                        },
+                        onOpenSettings = {
+                            val intent = android.content.Intent(
+                                android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                android.net.Uri.fromParts("package", context.packageName, null)
+                            )
+                            context.startActivity(intent)
+                        },
                         onFilterChange = { viewModel.setFilter(it) },
                         onSearchChange = { viewModel.setSearchQuery(it) },
                         onToggleSearch = { viewModel.toggleSearchExpanded() },
@@ -445,110 +481,7 @@ fun BentoHeader(
     }
 }
 
-/**
- * Bento Navigation Bar matching Design HTML:
- * Height 80dp (h-20), bg-[#1C1B1F], border-t border-[#44474E],
- * active pill bg-[#D0BCFF20] text-[#D0BCFF], uppercase tracking-widest labels.
- */
-@Composable
-fun BentoNavigationBar(
-    currentTab: GalleryTab,
-    onTabSelected: (GalleryTab) -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(BentoSurface)
-            .border(width = 1.dp, color = BentoBorder)
-            .windowInsetsPadding(WindowInsets.navigationBars)
-            .height(72.dp)
-            .testTag("gallery_bottom_nav"),
-        contentAlignment = Alignment.Center
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp),
-            horizontalArrangement = Arrangement.SpaceAround,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            BentoNavItem(
-                icon = Icons.Default.PhotoLibrary,
-                label = "Photos",
-                isSelected = currentTab == GalleryTab.TIMELINE,
-                onClick = { onTabSelected(GalleryTab.TIMELINE) },
-                tag = "nav_tab_photos"
-            )
 
-            BentoNavItem(
-                icon = Icons.Default.Folder,
-                label = "Albums",
-                isSelected = currentTab == GalleryTab.ALBUMS,
-                onClick = { onTabSelected(GalleryTab.ALBUMS) },
-                tag = "nav_tab_albums"
-            )
-
-            // Vault tab intentionally REMOVED from here (user request: a labeled
-            // "VAULT" tab makes the hidden vault's existence obvious to anyone glancing
-            // at the app). It's still fully reachable - by typing the secret code
-            // (default "\vault", changeable in Settings) into the search bar. See
-            // GalleryViewModel.setSearchQuery() and the VaultTutorialDialog below.
-
-            BentoNavItem(
-                icon = Icons.Default.Security,
-                label = "Setup",
-                isSelected = currentTab == GalleryTab.SETTINGS,
-                onClick = { onTabSelected(GalleryTab.SETTINGS) },
-                tag = "nav_tab_settings"
-            )
-        }
-    }
-}
-
-@Composable
-private fun BentoNavItem(
-    icon: ImageVector,
-    label: String,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    tag: String
-) {
-    Column(
-        modifier = Modifier
-            .clip(RoundedCornerShape(16.dp))
-            .clickable { onClick() }
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-            .testTag(tag),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        // Active pill container
-        Box(
-            modifier = Modifier
-                .clip(CircleShape)
-                .background(if (isSelected) BentoAccentSubtle else androidx.compose.ui.graphics.Color.Transparent)
-                .padding(horizontal = if (isSelected) 18.dp else 8.dp, vertical = 4.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = if (isSelected) BentoAccent else BentoTextSecondary.copy(alpha = 0.7f),
-                modifier = Modifier.size(20.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(3.dp))
-
-        Text(
-            text = label.uppercase(),
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.5.sp,
-            color = if (isSelected) BentoAccent else BentoTextSecondary.copy(alpha = 0.7f)
-        )
-    }
-}
 
 /**
  * One-time setup tutorial (Problem 9):

@@ -19,7 +19,9 @@ data class MediaItem(
     val isVideo: Boolean = false,
     val durationMs: Long = 0L,
     val isLocked: Boolean = false,
-    val isHidden: Boolean = false
+    val isHidden: Boolean = false,
+    val dateTaken: Long = 0L,
+    val relativeFolder: String? = null
 ) {
     val formattedSize: String
         get() {

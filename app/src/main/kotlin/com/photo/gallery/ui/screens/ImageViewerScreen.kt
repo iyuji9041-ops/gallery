@@ -145,6 +145,7 @@ fun ImageViewerScreen(
                 // PlayerView consumes taps itself before Compose ever sees them.
                 VideoPage(
                     uri = pageItem.uri,
+                    isActive = pagerState.currentPage == page,
                     onControlsVisibilityChanged = { visible -> showControls = visible }
                 )
             } else {
@@ -424,7 +425,11 @@ private fun PhotoPage(item: MediaItem, onTap: () -> Unit, onSwipeDownDismiss: ()
 @androidx.annotation.OptIn(UnstableApi::class)
 @kotlin.OptIn(UnstableApi::class)
 @Composable
-private fun VideoPage(uri: Uri, onControlsVisibilityChanged: (Boolean) -> Unit) {
+private fun VideoPage(
+    uri: Uri,
+    isActive: Boolean,
+    onControlsVisibilityChanged: (Boolean) -> Unit
+) {
     val context = LocalContext.current
     val exoPlayer = remember(uri) {
         val app = context.applicationContext as? com.photo.gallery.GalleryApplication
@@ -447,11 +452,19 @@ private fun VideoPage(uri: Uri, onControlsVisibilityChanged: (Boolean) -> Unit) 
         }
     }
 
+    LaunchedEffect(isActive) {
+        if (!isActive) {
+            exoPlayer.pause()
+        }
+    }
+
     // Release the player when this page leaves composition (swiped away, or viewer closed)
-    // to avoid leaking decoder resources - a very common source of playback bugs/crashes
-    // when a video viewer doesn't clean up after itself.
+    // to avoid leaking decoder resources.
     DisposableEffect(exoPlayer) {
-        onDispose { exoPlayer.release() }
+        onDispose {
+            exoPlayer.stop()
+            exoPlayer.release()
+        }
     }
 
     Box(

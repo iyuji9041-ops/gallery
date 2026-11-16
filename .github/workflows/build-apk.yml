@@ -73,22 +73,29 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: output-apks/*.apk
-          tag_name: v1.1.0
-          name: "Gallery v1.1.0 (Phase 2: VaultCore Hardware Security & Tink AEAD)"
+          tag_name: v1.2.0
+          name: "Gallery v1.2.0 (Phase 3 & 4: Functional Hardening, Migrations & Pill Navigation)"
           body: |
-            ## Gallery Android Application v1.1.0 - Phase 2 Security Hardening
+            ## Gallery Android Application v1.2.0 - Phase 3 & 4 Release
 
-            Key security enhancements:
-            - **Tink Streaming AEAD**: AES-256-GCM HKDF streaming encryption with random-access seek support for large media.
-            - **Android Keystore Wrapping**: Master key protected by hardware-backed Keystore with StrongBox support.
-            - **PIN Hardening**: PBKDF2-HMAC-SHA256 with 100,000 iterations, hardware Keystore HMAC binding, and exponential backoff lockout.
-            - **Biometric CryptoObject**: Biometric authentication cryptographically releases vault keys.
-            - **In-Memory Decryption**: Zero plaintext written to disk/cache; master key zeroed on session lock.
-            - **Auto-Lock & FLAG_SECURE**: Automatic background locking and dynamic screenshot/recents protection.
-            - **Backup Protection**: All cloud/local Android backups completely disabled.
-            - **Unit Tests Verified**: 100% passing crypto round-trip, seekable decryption, and lockout tests.
+            ### Phase 3 Functional Fixes:
+            - **No False 'Hidden' Success**: Verified copy checksum before requesting Scoped Storage deletion consent; never leaves originals silently visible.
+            - **Duplicate Row Race Fix**: Single insert path with -1 error detection and full metadata preservation (dateTaken, folder, original name).
+            - **Video & Photo Restore**: Correct collection selection (Images vs Video), original relative path preservation, IS_PENDING handling, and MediaStore rollback on failure.
+            - **Non-Destructive Room Migrations**: Removed destructive migration fallback; added explicit Migrations (1->2 unique index, 2->3 encryption metadata) with exported schemas.
+            - **Reliable Deletion Result**: Returns Success only when rows > 0 or dialog confirmed; handles cancellation and partial failures.
+            - **Real Library & Permissions**: Removed fake Unsplash demo photos and stripped INTERNET permission; added permission denied and partial access UI states.
+            - **Live Media Updates**: MediaStore ContentObserver with 500ms debounce and lifecycle ON_RESUME refresh.
+            - **Hierarchical Back Navigation**: Back returns from child tabs to Photos first; leaving vault locks it; predictive back supported.
+            - **Performance & ExoPlayer**: Optimized LazyVerticalGrid with stable keys, contentType, downscaled thumbnails, and ExoPlayer release on swipe.
+            - **Debug-Only Logging**: Secure GalleryLog wrapper stripping all logging in release builds.
 
-            Included artifacts:
+            ### Phase 4 Floating Pill Navigation:
+            - **PillNavigationBar**: Floating capsule navigation bar with Bento styling, elevation, and talkback Role.Tab semantics.
+            - Bottom content padding ensuring floating pill never covers the last row of photos.
+            - Fully responsive for gesture navigation, 3-button navigation, small & large screens, and font scale 1.3.
+
+            ### Included artifacts:
             - Debug APK
             - Release APK (R8 minified & resource shrunk)
           generate_release_notes: false
