@@ -13,7 +13,6 @@ import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.channels.SeekableByteChannel
-import java.nio.file.StandardOpenOption
 import java.security.SecureRandom
 import java.util.Arrays
 
@@ -112,7 +111,7 @@ class VaultCryptoTest {
         encStream.write(originalData)
         encStream.close()
 
-        val rawChannel = FileChannel.open(tempFile.toPath(), StandardOpenOption.READ)
+        val rawChannel = java.io.FileInputStream(tempFile).channel
 
         // Consume header
         val headerBuf = ByteBuffer.allocate(magicHeader.size)

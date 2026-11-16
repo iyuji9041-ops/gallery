@@ -8,11 +8,11 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.TransferListener
 import java.io.File
+import java.io.FileInputStream
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.channels.SeekableByteChannel
-import java.nio.file.StandardOpenOption
 
 /**
  * Media3 DataSource for Encrypted Vault Videos:
@@ -47,7 +47,8 @@ class EncryptedMedia3DataSource(
             throw IOException("Vault video file not found: $filePath")
         }
 
-        val fileChannel = FileChannel.open(file.toPath(), StandardOpenOption.READ)
+        val fis = FileInputStream(file)
+        val fileChannel = fis.channel
         rawFileChannel = fileChannel
 
         val channel = if (cryptoManager.isEncryptedFile(file)) {
