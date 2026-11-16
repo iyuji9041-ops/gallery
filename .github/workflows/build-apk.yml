@@ -74,7 +74,7 @@ jobs:
         with:
           files: output-apks/*.apk
           tag_name: v1.1.0
-          name: Gallery v1.1.0 (Phase 2: VaultCore Hardware Security & Tink AEAD)
+          name: "Gallery v1.1.0 (Phase 2: VaultCore Hardware Security & Tink AEAD)"
           body: |
             ## Gallery Android Application v1.1.0 - Phase 2 Security Hardening
 
