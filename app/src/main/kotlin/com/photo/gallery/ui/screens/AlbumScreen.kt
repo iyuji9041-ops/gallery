@@ -130,7 +130,7 @@ fun AlbumScreen(
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(3), // was 2 - user requested Xiaomi-Gallery-style 3-column density
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 110.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize()

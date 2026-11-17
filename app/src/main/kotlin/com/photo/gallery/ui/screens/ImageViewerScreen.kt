@@ -10,6 +10,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
@@ -20,14 +21,18 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -57,6 +62,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -256,64 +262,71 @@ fun ImageViewerScreen(
             exit = fadeOut() + slideOutVertically { it },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = if (isCurrentVideo) 56.dp else 0.dp)
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(bottom = if (isCurrentVideo) 64.dp else 16.dp, start = 16.dp, end = 16.dp)
         ) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding(),
-                color = BentoSurface.copy(alpha = 0.9f)
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
             ) {
-                Row(
+                // Floating pill capsule action bar (Phase 4 Bento styling)
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, BentoBorder)
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceAround,
-                    verticalAlignment = Alignment.CenterVertically
+                        .widthIn(max = 440.dp)
+                        .shadow(elevation = 16.dp, shape = CircleShape, spotColor = BentoAccent.copy(alpha = 0.25f))
+                        .clip(CircleShape)
+                        .background(BentoSurface.copy(alpha = 0.95f))
+                        .border(width = 1.dp, color = BentoBorder, shape = CircleShape)
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
                 ) {
-                    ViewerActionButton(
-                        icon = Icons.Default.Share,
-                        label = "Share",
-                        tint = BentoTextPrimary,
-                        tag = "viewer_share_button",
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_SEND).apply {
-                                type = currentItem.mimeType
-                                putExtra(Intent.EXTRA_STREAM, currentItem.uri)
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        ViewerActionButton(
+                            icon = Icons.Default.Share,
+                            label = "Share",
+                            tint = BentoTextPrimary,
+                            tag = "viewer_share_button",
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                    type = currentItem.mimeType
+                                    putExtra(Intent.EXTRA_STREAM, currentItem.uri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(Intent.createChooser(intent, "Share via"))
                             }
-                            context.startActivity(Intent.createChooser(intent, "Share via"))
-                        }
-                    )
-                    ViewerActionButton(
-                        icon = if (currentItem.isLocked) Icons.Default.Lock else Icons.Default.LockOpen,
-                        label = if (currentItem.isLocked) "Locked" else "Lock",
-                        tint = if (currentItem.isLocked) BentoAccent else BentoTextSecondary,
-                        tag = "viewer_lock_toggle_button",
-                        onClick = { onToggleLock(currentItem) }
-                    )
-                    ViewerActionButton(
-                        icon = Icons.Default.VisibilityOff,
-                        label = "Vault",
-                        tint = BentoAccent,
-                        tag = "viewer_vault_button",
-                        onClick = { onMoveToVault(currentItem) }
-                    )
-                    ViewerActionButton(
-                        icon = Icons.Default.Info,
-                        label = "Info",
-                        tint = BentoTextPrimary,
-                        tag = "viewer_info_button",
-                        onClick = onShowExif
-                    )
-                    ViewerActionButton(
-                        icon = Icons.Default.Delete,
-                        label = "Delete",
-                        tint = BentoRose,
-                        tag = "viewer_delete_button",
-                        onClick = { onDeleteRequest(currentItem) }
-                    )
+                        )
+                        ViewerActionButton(
+                            icon = if (currentItem.isLocked) Icons.Default.Lock else Icons.Default.LockOpen,
+                            label = if (currentItem.isLocked) "Locked" else "Lock",
+                            tint = if (currentItem.isLocked) BentoAccent else BentoTextSecondary,
+                            tag = "viewer_lock_toggle_button",
+                            onClick = { onToggleLock(currentItem) }
+                        )
+                        ViewerActionButton(
+                            icon = Icons.Default.VisibilityOff,
+                            label = "Vault",
+                            tint = BentoAccent,
+                            tag = "viewer_vault_button",
+                            onClick = { onMoveToVault(currentItem) }
+                        )
+                        ViewerActionButton(
+                            icon = Icons.Default.Info,
+                            label = "Info",
+                            tint = BentoTextPrimary,
+                            tag = "viewer_info_button",
+                            onClick = onShowExif
+                        )
+                        ViewerActionButton(
+                            icon = Icons.Default.Delete,
+                            label = "Delete",
+                            tint = BentoRose,
+                            tag = "viewer_delete_button",
+                            onClick = { onDeleteRequest(currentItem) }
+                        )
+                    }
                 }
             }
         }
@@ -504,27 +517,30 @@ private fun ViewerActionButton(
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
         modifier = Modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(CircleShape)
+            .clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 4.dp)
             .testTag(tag)
     ) {
-        IconButton(
-            onClick = onClick,
-            modifier = Modifier.size(42.dp)
+        Box(
+            modifier = Modifier.size(34.dp),
+            contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = label,
                 tint = tint,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(20.dp)
             )
         }
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
             color = tint,
-            fontSize = 11.sp
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium
         )
     }
 }

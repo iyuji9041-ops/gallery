@@ -2,6 +2,24 @@
 
 All notable changes to Secure Gallery are documented in this file.
 
+## [1.3.0] - Floating Pill Navigation, New Launcher Icon & Architecture Guide
+
+### Added
+- **App Launcher Icon from `Icon2`**:
+  - Replaced generic Android robot icons with customized launcher icons across all mipmap densities (`mdpi`, `hdpi`, `xhdpi`, `xxhdpi`, `xxxhdpi`).
+  - Added support for adaptive foreground, background, monochrome themed icons, and legacy round icon variants.
+- **True Transparent Floating Navigation**:
+  - Removed black container background behind the floating pill navigation bar in `GalleryAppRoot.kt`.
+  - Photos, albums, and settings now scroll seamlessly beneath the floating pill bar across the entire screen.
+- **Floating Pill Action Bar in Image Viewer (`ImageViewerScreen.kt`)**:
+  - Replaced the rectangular full-width bottom action bar in the full-screen photo/video viewer with an elevated floating pill capsule.
+  - Matches the main screen's Bento floating capsule aesthetic (`CircleShape`, `BentoSurface` elevation, `BentoBorder`, and `navigationBars` insets).
+  - Maintains 64dp clearance over ExoPlayer's playback controls during video playback.
+- **Expanded Bottom Content Padding**:
+  - Added 110.dp bottom content padding across `AlbumScreen`, `SettingsScreen`, `HiddenVaultScreen`, and `MainGridScreen` to prevent floating pills from obscuring items when scrolled to the end.
+- **Comprehensive Repository Architecture Documentation**:
+  - Added `README.md` detailing folder structures, security models, build instructions, and developer customization workflows.
+
 ## [1.2.1] - Hotfix: Startup Crash on Android KeyStore Caller-Provided IV
 
 ### Fixed

@@ -201,20 +201,12 @@ fun GalleryAppRoot(viewModel: GalleryViewModel) {
                     isLocked = uiState.securitySettings.deletionLockEnabled
                 )
             }
-        },
-        bottomBar = {
-            if (uiState.activeViewerItem == null && !uiState.isSlideshowActive && !uiState.isSelectionMode) {
-                PillNavigationBar(
-                    currentTab = uiState.currentTab,
-                    onTabSelected = { viewModel.selectTab(it) }
-                )
-            }
         }
     ) { innerPadding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(top = innerPadding.calculateTopPadding())
         ) {
             when (uiState.currentTab) {
                 GalleryTab.TIMELINE -> {
@@ -312,6 +304,15 @@ fun GalleryAppRoot(viewModel: GalleryViewModel) {
                         onSelectAutoLockDelay = { viewModel.setAutoLockDelay(it) }
                     )
                 }
+            }
+
+            // Floating Pill Navigation Bar (truly floating with transparent backdrop over content)
+            if (uiState.activeViewerItem == null && !uiState.isSlideshowActive && !uiState.isSelectionMode) {
+                PillNavigationBar(
+                    currentTab = uiState.currentTab,
+                    onTabSelected = { viewModel.selectTab(it) },
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                )
             }
         }
 
